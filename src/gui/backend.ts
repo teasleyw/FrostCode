@@ -174,8 +174,8 @@ export function groupSessions(saved: SavedSession[], recent: { path: string; las
     g.lastActivity = Math.max(g.lastActivity, s.lastModified);
   }
   for (const p of recent) {
-    // Older entries may hold an unresolved path (/tmp/x, C:\Users\WILLIA~1\x) for a project the runtime
-    // records as /private/tmp/x (C:\Users\WilliamTeasley\x).
+    // Older entries may hold an unresolved path (/tmp/x, C:\Users\JOHNSM~1\x) for a project the runtime
+    // records as /private/tmp/x (C:\Users\JohnSmith\x).
     const g = group(realOrSelf(p.path));
     g.lastActivity = Math.max(g.lastActivity, p.lastOpened);
   }

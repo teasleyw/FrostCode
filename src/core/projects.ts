@@ -45,7 +45,7 @@ export function resolveProjectPath(input: string, from: string): string {
   if (!existsSync(abs)) throw new Error(`No such directory: ${abs}`);
   if (!statSync(abs).isDirectory()) throw new Error(`Not a directory: ${abs}`);
   // The agent runtime reports real paths (/tmp -> /private/tmp); match it so paths display relative.
-  // Native, as the runtime's is: on Windows it also expands 8.3 short names (WILLIA~1).
+  // Native, as the runtime's is: on Windows it also expands 8.3 short names (JOHNSM~1).
   return realpathSync.native(abs);
 }
 

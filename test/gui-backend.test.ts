@@ -51,7 +51,7 @@ describe('desktop session list', () => {
   // Needs a temp dir that is not already its own real path (true on macOS, and on Windows when TEMP holds an 8.3 name).
   it.skipIf(realpathSync.native(tmpdir()) === tmpdir())('merges a recent project stored as an unresolved path with its sessions (/tmp vs /private/tmp)', () => {
     const real = makeProject();
-    const unresolved = join(tmpdir(), basename(real)); // macOS: /var/folders/... -> /private/var/folders/...; Windows: WILLIA~1 -> WilliamTeasley
+    const unresolved = join(tmpdir(), basename(real)); // macOS: /var/folders/... -> /private/var/folders/...; Windows: JOHNSM~1 -> JohnSmith
     expect(unresolved).not.toBe(real);
     const groups = groupSessions([{ id: 's1', title: 't', lastModified: 100, cwd: real }], [{ path: unresolved, lastOpened: 50 }]);
     expect(groups.map((g) => g.cwd)).toEqual([real]);
