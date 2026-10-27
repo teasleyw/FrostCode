@@ -1,0 +1,89 @@
+#!/usr/bin/expect -f
+# Drives plan mode, the model picker, the resume picker, the Codex browser and /context.
+# Usage: features.exp <workdir> <logfile>
+set timeout 150
+set workdir [lindex $argv 0]
+set logfile [lindex $argv 1]
+log_file -noappend $logfile
+set env(COLUMNS) 110
+set env(LINES) 45
+
+proc wait_for {pattern what} {
+  expect {
+    -re $pattern {}
+    timeout { puts "\nFAIL: $what"; exit 1 }
+    eof { puts "\nFAIL: exited while waiting for $what"; exit 1 }
+  }
+}
+proc drain {secs} {
+  expect -timeout $secs -re {__never_matches__} {}
+}
+proc type_line {text} {
+  send -- $text
+  drain 1
+  send -- "\r"
+}
+
+spawn -noecho node [file dirname [info script]]/../bin/frostcode.js -C $workdir --plan -m claude-sonnet-5-5
+stty rows 45 columns 110 < $spawn_out(slave,name)
+wait_for "plan mode on" "plan mode indicator"
+drain 2
+
+# Model picker: filter to Haiku and pick it.
+type_line "/model"
+wait_for "Select model" "model picker"
+drain 1
+send -- "haiku"
+drain 1
+send -- "\r"
+wait_for "Model set to Haiku" "model switch confirmation"
+drain 1
+
+# Plan mode: Claude must propose a plan before editing.
+type_line "In notes.txt replace every occurrence of frozen with icy using the Edit tool (replace_all). Keep the plan to one step."
+wait_for "Ready to code" "plan approval prompt"
+drain 1
+send -- "1"
+wait_for "accept edits on" "accept-edits mode after approving the plan"
+wait_for "Updated notes.txt with" "edit after plan approval"
+# Claude may verify with a shell command that needs approval; approve those until the turn ends.
+expect {
+  "Do you want to proceed?" { drain 1; send -- "1"; exp_continue }
+  -re {Try "explain} {}
+  timeout { puts "\nFAIL: turn to finish"; exit 1 }
+}
+drain 1
+
+type_line "/context"
+wait_for {Context .*\([0-9]+%\)} "context usage bar"
+drain 1
+
+type_line "/resume"
+wait_for "Resume a conversation" "resume picker"
+drain 1
+send -- "\033"
+drain 1
+
+type_line "/codex all"
+wait_for "Recent Codex sessions" "codex browser"
+drain 1
+send -- "\r"
+wait_for "Show details" "codex actions"
+drain 1
+send -- "\r"
+wait_for "Codex session " "codex details"
+wait_for "read-only" "read-only note"
+drain 1
+
+type_line "/status"
+wait_for "auth +ANTHROPIC_API_KEY" "status shows API-key auth"
+drain 1
+
+send -- "\003"
+drain 1
+send -- "\003"
+expect {
+  eof {}
+  timeout { puts "\nFAIL: did not exit"; exit 1 }
+}
+puts "\nFEATURES-OK"

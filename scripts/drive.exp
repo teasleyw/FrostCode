@@ -1,0 +1,65 @@
+#!/usr/bin/expect -f
+# Drives the real interactive FrostCode UI in a pseudo-terminal:
+# a plain conversation turn, an Edit that needs approval, and /cost.
+# Usage: drive.exp <workdir> <logfile> <model>
+set timeout 120
+set workdir [lindex $argv 0]
+set logfile [lindex $argv 1]
+set model [lindex $argv 2]
+log_file -noappend $logfile
+set env(COLUMNS) 110
+set env(LINES) 40
+
+# Keep reading the terminal while waiting; a pty that is not drained blocks the app's writes.
+proc wait_for {pattern what} {
+  expect {
+    -re $pattern {}
+    timeout { puts "\nFAIL: $what"; exit 1 }
+    eof { puts "\nFAIL: exited while waiting for $what"; exit 1 }
+  }
+}
+proc drain {secs} {
+  expect -timeout $secs -re {__never_matches__} {}
+}
+
+spawn -noecho node [file dirname [info script]]/../bin/frostcode.js -C $workdir -m $model
+stty rows 40 columns 110 < $spawn_out(slave,name)
+
+wait_for "Welcome to" "welcome banner"
+wait_for "Try \"explain" "input box"
+drain 2
+
+send -- "Reply with exactly the word: frosty"
+drain 1
+send -- "\r"
+# The assistant's reply is drawn after a bullet; the echo of the prompt is not.
+wait_for {● [^\r\n]*frosty} "assistant reply"
+wait_for {\$0\.[0-9]*[1-9]} "non-zero cost in status bar"
+drain 2
+
+send -- "Edit notes.txt: replace the word cold with frozen everywhere (replace_all). Use the Edit tool."
+drain 1
+send -- "\r"
+wait_for {\+ [^\r\n]*frozen} "diff preview with the new text"
+wait_for "Do you want to make this edit to notes.txt" "edit permission prompt"
+drain 1
+send -- "1"
+wait_for "Updated notes.txt with" "edit result"
+# wait for the turn to settle (spinner gone -> placeholder back)
+wait_for "Try \"explain" "turn to finish"
+drain 1
+
+send -- "/cost"
+drain 1
+send -- "\r"
+wait_for "Session cost" "/cost output"
+drain 1
+
+send -- "\003"
+drain 1
+send -- "\003"
+expect {
+  eof {}
+  timeout { puts "\nFAIL: did not exit on double ctrl-c"; exit 1 }
+}
+puts "\nDRIVE-OK"
