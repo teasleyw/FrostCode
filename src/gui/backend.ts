@@ -324,7 +324,7 @@ export class GuiBackend {
     this.unsubscribe = null;
     this.ctrl = null;
     this.phase = 'starting';
-    if (old?.busy) this.toBackground(old);
+    if (old?.active) this.toBackground(old); // a running turn or background agents keep going
     else await this.close(old);
     if (gen !== this.generation || this.closed) return;
     const running = resume ? [...this.background.keys()].find((c) => c.sessionId === resume && c.cwd === cwd) : undefined;
@@ -385,7 +385,7 @@ export class GuiBackend {
   private onBackgroundChange(ctrl: AppController, entry: { unsubscribe: () => void; lastId: string | null }): void {
     if (this.background.get(ctrl) !== entry) return;
     const id = ctrl.sessionId;
-    if (!ctrl.busy) {
+    if (!ctrl.active) {
       // The turn ended unseen: record it and free the runtime. Reopening resumes it from disk.
       if (id && !this.stopped.has(ctrl)) this.finished.add(id);
       entry.unsubscribe();
@@ -477,7 +477,7 @@ export class GuiBackend {
       busy: c?.busy ?? false,
       busySince: c?.busySince ?? null,
       finished: [...this.finished],
-      running: [c, ...this.background.keys()].flatMap((x) => (x?.busy && x.sessionId ? [x.sessionId] : [])),
+      running: [c, ...this.background.keys()].flatMap((x) => (x?.active && x.sessionId ? [x.sessionId] : [])),
       waiting: [...this.background.keys()].flatMap((x) => (x.pending.length && x.sessionId ? [x.sessionId] : [])),
       mode: c?.mode ?? this.mode,
       model: this.model,
@@ -574,7 +574,7 @@ export class GuiBackend {
 
   /** Conversations with a turn running, the open one included. */
   get runningCount(): number {
-    return [this.ctrl, ...this.background.keys()].filter((c) => c?.busy).length;
+    return [this.ctrl, ...this.background.keys()].filter((c) => c?.active).length;
   }
 
   get sessionGroups(): GuiProjectGroup[] {

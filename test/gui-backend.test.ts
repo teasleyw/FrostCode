@@ -439,6 +439,40 @@ describe('several conversations running at once', () => {
     release();
   });
 
+  it('keeps a conversation whose turn ended alive while its background agents run, after switching away', async () => {
+    const cwd = makeProject();
+    const s1 = writeTranscript(cwd, [['first', 'ok']], { at: Date.now() - 2000 });
+    const s2 = writeTranscript(cwd, [['second', 'ok']], { at: Date.now() - 1000 });
+    let agentRun: Parameters<Parameters<typeof makeFakeQuery>[0]>[1] | null = null;
+    const { backend } = backendFor({ defaultCwd: cwd, prefsFile: prefsIn(makeProject()) }, (p, run) => {
+      const id = run.options.resume as string;
+      run.emit(initMsg(id));
+      if (p === 'launch agents') {
+        agentRun = run;
+        run.emit({ type: 'system', subtype: 'task_started', task_id: 't1', description: 'season build', session_id: id, uuid: 'u1' } as never);
+      }
+      run.emit(assistantText('started'));
+      run.emit(resultMsg(0.001, id));
+    });
+    await backend.refreshSessions(false);
+    await backend.openSession(s1, cwd);
+    const c1 = backend.controller!;
+    await backend.submit('launch agents');
+    await until(() => !c1.busy && c1.backgroundTasks === 1);
+
+    await backend.openSession(s2, cwd);
+    expect(c1.session.closed).toBe(false); // switching away must not kill the agent
+    expect(backend.snapshot().running).toEqual([s1]);
+    expect(backend.runningCount).toBe(1); // quitting warns
+
+    // The agent reports back; the runtime answers on its own, then the conversation is freed.
+    agentRun!.emit({ type: 'system', subtype: 'task_notification', task_id: 't1', status: 'completed', output_file: '/tmp/x', summary: 'done', session_id: s1, uuid: 'u2' } as never);
+    agentRun!.emit(assistantText('the season build finished'));
+    agentRun!.emit(resultMsg(0.001, s1));
+    await until(() => c1.session.closed);
+    expect(backend.snapshot().finished).toContain(s1);
+  });
+
   it('deleting or quitting shuts background turns down', async () => {
     const { backend, cwd, s1, s2 } = twoSessions();
     await backend.refreshSessions(false);

@@ -113,6 +113,16 @@ export class AppController implements PromptHost {
     return this.session?.busy ?? false;
   }
 
+  /** Background tasks still running in the runtime; closing it would kill them. */
+  get backgroundTasks(): number {
+    return this.session?.tasks.size ?? 0;
+  }
+
+  /** A turn is running or background tasks are: the runtime must stay up. */
+  get active(): boolean {
+    return this.busy || this.backgroundTasks > 0;
+  }
+
   get sessionId(): string | null {
     return this.session?.info.sessionId ?? null;
   }

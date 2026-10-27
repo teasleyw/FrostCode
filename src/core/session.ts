@@ -75,6 +75,8 @@ export class AgentSession {
   private running: Promise<void> | null = null;
   busy = false;
   closed = false;
+  /** Background tasks (subagents, background shells) still running inside the runtime after its turn ended. */
+  readonly tasks = new Set<string>();
   info: SessionInfo;
   onBusyChange: (busy: boolean) => void = () => {};
   onExit: (error: Error | null) => void = () => {};
@@ -151,6 +153,7 @@ export class AgentSession {
     } finally {
       this.q = null;
       this.input = null;
+      this.tasks.clear();
       this.setBusy(false);
       this.onExit(error);
     }
@@ -171,6 +174,14 @@ export class AgentSession {
       };
     } else if (msg.type === 'system' && msg.subtype === 'status' && msg.permissionMode) {
       this.info = { ...this.info, permissionMode: msg.permissionMode };
+    } else if (msg.type === 'system' && msg.subtype === 'task_started') {
+      this.tasks.add(msg.task_id);
+    } else if (msg.type === 'system' && msg.subtype === 'task_notification') {
+      this.tasks.delete(msg.task_id);
+    } else if (msg.type === 'system' && msg.subtype === 'task_updated' && ['completed', 'failed', 'killed'].includes(msg.patch.status ?? '')) {
+      this.tasks.delete(msg.task_id);
+    } else if ((msg.type === 'assistant' || msg.type === 'stream_event') && !this.busy) {
+      this.setBusy(true); // a turn the runtime started itself (a background task reporting back)
     } else if (msg.type === 'result') {
       this.info = { ...this.info, sessionId: msg.session_id };
       this.setBusy(false);
