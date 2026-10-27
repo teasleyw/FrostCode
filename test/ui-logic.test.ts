@@ -65,8 +65,10 @@ describe('line editor', () => {
 describe('tool display', () => {
   const cwd = '/repo';
   it('labels tools like Claude Code', () => {
-    expect(toolHeader('Edit', { file_path: '/repo/src/a.ts' }, cwd)).toEqual({ verb: 'Update', arg: 'src/a.ts' });
+    // Relative paths use the platform's separator (src\a.ts on Windows).
+    expect(toolHeader('Edit', { file_path: '/repo/src/a.ts' }, cwd)).toEqual({ verb: 'Update', arg: join('src', 'a.ts') });
     expect(toolHeader('Bash', { command: 'npm test' }, cwd)).toEqual({ verb: 'Bash', arg: 'npm test' });
+    expect(toolHeader('PowerShell', { command: 'Get-ChildItem\r\nnpm test' }, cwd)).toEqual({ verb: 'PowerShell', arg: 'Get-ChildItem ⏎ npm test' });
     expect(toolHeader('Grep', { pattern: 'TODO', path: '/repo/src' }, cwd).arg).toBe('pattern: "TODO", path: "src"');
     expect(toolHeader('mcp__github__get_issue', { id: '12' }, cwd).verb).toBe('github · get_issue (MCP)');
     expect(displayPath('/elsewhere/x', cwd)).toBe('/elsewhere/x');

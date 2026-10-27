@@ -38,7 +38,8 @@ export function toolHeader(name: string, input: Record<string, unknown>, cwd: st
     case 'NotebookEdit':
       return { verb: 'Edit Notebook', arg: path('notebook_path') };
     case 'Bash':
-      return { verb: 'Bash', arg: clip(str(input.command).replace(/\s*\n\s*/g, ' ⏎ '), 160) };
+    case 'PowerShell':
+      return { verb: name, arg: clip(str(input.command).replace(/\s*\r?\n\s*/g, ' ⏎ '), 160) };
     case 'Grep':
       return { verb: 'Search', arg: `pattern: "${clip(str(input.pattern), 60)}"${input.path ? `, path: "${displayPath(str(input.path), cwd)}"` : ''}` };
     case 'Glob':
@@ -70,7 +71,7 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 /** One-line (or few-line) result shown under the tool header after "⎿". */
 export function toolSummary(item: Extract<TranscriptItem, { kind: 'tool' }>, cwd: string): string {
   const result = item.result ?? '';
-  if (item.status === 'running') return item.name === 'Bash' ? 'Running…' : '';
+  if (item.status === 'running') return item.name === 'Bash' || item.name === 'PowerShell' ? 'Running…' : '';
   if (item.status === 'denied') return 'Denied by you';
   if (item.status === 'error') return firstLines(cleanError(result), 4) || 'Error';
   const detail = item.detail as Record<string, any> | undefined;
@@ -92,6 +93,7 @@ export function toolSummary(item: Extract<TranscriptItem, { kind: 'tool' }>, cwd
       return `Updated ${p} with ${plural(add, 'addition')} and ${plural(remove, 'removal')}`;
     }
     case 'Bash':
+    case 'PowerShell':
       return firstLines(result.trimEnd(), 5) || '(no output)';
     case 'Grep':
     case 'Glob': {

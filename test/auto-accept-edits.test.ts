@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { prepareProcessEnv } from '../src/config/env.js';
 import { GuiBackend, type BackendEvent } from '../src/gui/backend.js';
 import { AppController } from '../src/app/controller.js';
-import { acceptEditsShellGuard, runsFilesystemCommand } from '../src/core/accept-edits-guard.js';
+import { acceptEditsShellGuard, runsFilesystemCommand, runsPowerShellFilesystemCommand } from '../src/core/accept-edits-guard.js';
 import { modeLabel } from '../src/gui/renderer/store.js';
 import { assistantToolUse, initMsg, makeFakeQuery, resultMsg, toolResult, until, type FakeRun } from './helpers/fake-query.js';
 import { makeProject, writeTranscript } from './helpers/transcripts.js';
@@ -34,11 +34,11 @@ function backendFor(cwd: string, responder: Parameters<typeof makeFakeQuery>[0] 
 const modeCalls = (run: FakeRun) => run.calls.filter((c) => c.method === 'setPermissionMode').map((c) => c.args[0]);
 
 /** Run the PreToolUse hooks the session registered, the way the runtime would. */
-async function preToolUse(options: Options, command: string, permissionMode?: string) {
+async function preToolUse(options: Options, command: string, permissionMode?: string, toolName = 'Bash') {
   const matchers = (options.hooks?.PreToolUse ?? []) as HookCallbackMatcher[];
   const input = {
     hook_event_name: 'PreToolUse',
-    tool_name: 'Bash',
+    tool_name: toolName,
     tool_input: { command },
     tool_use_id: 't',
     session_id: 's',
@@ -47,7 +47,8 @@ async function preToolUse(options: Options, command: string, permissionMode?: st
     permission_mode: permissionMode,
   } as unknown as HookInput;
   const out = [];
-  for (const m of matchers) if (!m.matcher || m.matcher === 'Bash') for (const h of m.hooks) out.push(await h(input, 't', { signal: new AbortController().signal }));
+  // Matchers are regexes over the tool name, as in the runtime.
+  for (const m of matchers) if (!m.matcher || new RegExp(`^(?:${m.matcher})$`).test(toolName)) for (const h of m.hooks) out.push(await h(input, 't', { signal: new AbortController().signal }));
   return out;
 }
 const decision = (outs: unknown[]) =>
@@ -183,6 +184,19 @@ describe('the guard', () => {
     for (const c of ['rm a', 'cd x && rm a', 'echo hi; touch f', 'sudo mv a b', 'FOO=1 cp a b', 'cat a | tee b', '/bin/rm a', 'x=$(mkdir d)'])
       expect(runsFilesystemCommand(c), c).toBe(true);
     for (const c of ['npm test', 'git status', 'ls -la', 'grep rm notes.txt', 'echo "mv"']) expect(runsFilesystemCommand(c), c).toBe(false);
+  });
+
+  it('spots PowerShell cmdlets and aliases in any case, including inside script blocks', () => {
+    for (const c of ['Remove-Item -Recurse build', 'remove-item x', 'del a.txt', 'cd x; ni f', 'gci | % { Move-Item $_ d }', '& rm a', 'Set-Content a.txt hi', 'C:\\tools\\rm.exe a', 'npm test && Copy-Item a b'])
+      expect(runsPowerShellFilesystemCommand(c), c).toBe(true);
+    for (const c of ['npm test', 'git status', 'Get-ChildItem', 'Select-String rm notes.txt', 'Write-Output "Remove-Item"']) expect(runsPowerShellFilesystemCommand(c), c).toBe(false);
+  });
+
+  it('sends PowerShell file changes back through the prompt in auto-accept edits', async () => {
+    const m = acceptEditsShellGuard(() => 'acceptEdits');
+    const opts = { hooks: { PreToolUse: [m] } } as unknown as Options;
+    expect(decision(await preToolUse(opts, 'Remove-Item -Recurse build', 'acceptEdits', 'PowerShell'))).toBe('ask');
+    expect(decision(await preToolUse(opts, 'Get-ChildItem', 'acceptEdits', 'PowerShell'))).toBeUndefined();
   });
 
   it('ignores other tools', async () => {

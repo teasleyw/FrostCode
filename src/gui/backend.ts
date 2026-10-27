@@ -84,7 +84,7 @@ export function toGuiItem(item: TranscriptItem, cwd: string): GuiItem {
         }
       }
       let input: string;
-      if (item.name === 'Bash' && typeof item.input.command === 'string') input = item.input.command;
+      if ((item.name === 'Bash' || item.name === 'PowerShell') && typeof item.input.command === 'string') input = item.input.command;
       else input = JSON.stringify(item.input, null, 2);
       return {
         kind: 'tool',
@@ -149,7 +149,7 @@ function viewedFile(sessionId: string): { file: string; mtime: Date } | null {
 
 function realOrSelf(path: string): string {
   try {
-    return realpathSync(path);
+    return realpathSync.native(path);
   } catch {
     return path;
   }
@@ -174,7 +174,8 @@ export function groupSessions(saved: SavedSession[], recent: { path: string; las
     g.lastActivity = Math.max(g.lastActivity, s.lastModified);
   }
   for (const p of recent) {
-    // Older entries may hold an unresolved path (/tmp/x) for a project the runtime records as /private/tmp/x.
+    // Older entries may hold an unresolved path (/tmp/x, C:\Users\WILLIA~1\x) for a project the runtime
+    // records as /private/tmp/x (C:\Users\WilliamTeasley\x).
     const g = group(realOrSelf(p.path));
     g.lastActivity = Math.max(g.lastActivity, p.lastOpened);
   }
@@ -231,7 +232,7 @@ const GUI_MODES: GuiMode[] = ['default', 'acceptEdits', 'plan', 'auto'];
 const DESKTOP_EQUIVALENT: Record<string, string> = {
   model: 'Pick a model from the menu in the top bar.',
   resume: 'Pick a conversation from the sidebar.',
-  project: 'Choose a project with the project button in the top bar (⌘O).',
+  project: `Choose a project with the project button in the top bar (${process.platform === 'darwin' ? '⌘O' : 'Ctrl+O'}).`,
   codex: 'Codex browsing is available in the terminal app (frostcode, then /codex).',
 };
 
@@ -647,7 +648,9 @@ export class GuiBackend {
     const cmd = /^\/(\S+)/.exec(trimmed)?.[1];
     if (cmd === 'clear' || cmd === 'new') return this.newSession(ctrl.cwd);
     if (cmd === 'exit' || cmd === 'quit') {
-      ctrl.transcript.addSystem('Close the window (⌘W) or quit (⌘Q) to leave the desktop app.');
+      ctrl.transcript.addSystem(
+        process.platform === 'darwin' ? 'Close the window (⌘W) or quit (⌘Q) to leave the desktop app.' : 'Close the window (Ctrl+W) to leave the desktop app.',
+      );
       return;
     }
     await ctrl.submit(trimmed);

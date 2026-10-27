@@ -43,12 +43,18 @@ export interface PromptHost {
 }
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+/** Tools that run a command line: Bash everywhere, PowerShell on Windows. */
+const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
 
-/** The session rule an "always allow" answer adds. Bash rules are scoped to the command's first word. */
+export function isShellTool(toolName: string): boolean {
+  return SHELL_TOOLS.has(toolName);
+}
+
+/** The session rule an "always allow" answer adds. Shell rules are scoped to the command's first word. */
 export function ruleFor(toolName: string, input: Record<string, unknown>): string {
-  if (toolName === 'Bash' && typeof input.command === 'string') {
+  if (SHELL_TOOLS.has(toolName) && typeof input.command === 'string') {
     const first = input.command.trim().split(/\s+/)[0] ?? '';
-    return first ? `Bash(${first}:*)` : 'Bash';
+    return first ? `${toolName}(${first}:*)` : toolName;
   }
   if (EDIT_TOOLS.has(toolName)) return 'Edit';
   return toolName;
@@ -59,12 +65,13 @@ export function ruleMatches(rule: string, toolName: string, input: Record<string
   if (!m) return rule === toolName || (rule === 'Edit' && EDIT_TOOLS.has(toolName));
   const [, tool, spec] = m;
   if (tool !== toolName) return false;
-  if (toolName === 'Bash' && typeof input.command === 'string') {
+  if (SHELL_TOOLS.has(toolName) && typeof input.command === 'string') {
     const cmd = input.command.trim();
     if (spec.endsWith(':*')) {
       const prefix = spec.slice(0, -2);
-      // Never let a prefix rule approve a compound command that chains something else.
-      if (/[;&|`$<>]/.test(cmd)) return false;
+      // Never let a prefix rule approve a compound command that chains something else
+      // (a newline separates commands in both shells; PowerShell's escape is the backtick).
+      if (/[;&|`$<>\r\n]/.test(cmd)) return false;
       return cmd === prefix || cmd.startsWith(prefix + ' ');
     }
     return cmd === spec;

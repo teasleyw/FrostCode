@@ -38,7 +38,7 @@ export class MissingApiKeyError extends Error {
   constructor() {
     super(
       'ANTHROPIC_API_KEY is not set. FrostCode bills to the Anthropic API, so export a key first:\n' +
-        '  export ANTHROPIC_API_KEY=sk-ant-...\n' +
+        (process.platform === 'win32' ? '  $env:ANTHROPIC_API_KEY = "sk-ant-..."   (PowerShell; setx ANTHROPIC_API_KEY sk-ant-... keeps it)\n' : '  export ANTHROPIC_API_KEY=sk-ant-...\n') +
         'Create one at https://platform.claude.com/settings/keys\n' +
         'Or save one as a named account: frostcode account add <name>',
     );

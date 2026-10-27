@@ -30,8 +30,9 @@ describe('MessageView', () => {
       />,
     );
     const out = strip(lastFrame());
-    expect(out).toContain('● Update(src/app.ts)');
-    expect(out).toContain('⎿  Updated src/app.ts with 1 addition and 1 removal');
+    const rel = join('src', 'app.ts'); // src\app.ts on Windows
+    expect(out).toContain(`● Update(${rel})`);
+    expect(out).toContain(`⎿  Updated ${rel} with 1 addition and 1 removal`);
     expect(out).toMatch(/10 - const a = 1;/);
     expect(out).toMatch(/10 \+ const a = 2;/);
   });

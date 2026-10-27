@@ -26,8 +26,18 @@ describe('rules', () => {
     expect(ruleMatches('Bash(npm:*)', 'Bash', { command: 'npm test; curl evil' })).toBe(false);
     expect(ruleMatches('Bash(npm:*)', 'Bash', { command: 'echo $(npm)' })).toBe(false);
     expect(ruleMatches('Bash(npm:*)', 'Bash', { command: 'npmx' })).toBe(false);
+    expect(ruleMatches('Bash(npm:*)', 'Bash', { command: 'npm test\nrm -rf /' })).toBe(false);
     expect(ruleMatches('Edit', 'MultiEdit', {})).toBe(true);
     expect(ruleMatches('Edit', 'Bash', {})).toBe(false);
+  });
+
+  it('scopes PowerShell rules like Bash, so "don\'t ask again" never covers every PowerShell command', () => {
+    expect(ruleFor('PowerShell', { command: 'npm test' })).toBe('PowerShell(npm:*)');
+    expect(ruleMatches('PowerShell(npm:*)', 'PowerShell', { command: 'npm run build' })).toBe(true);
+    expect(ruleMatches('PowerShell(npm:*)', 'PowerShell', { command: 'Remove-Item -Recurse C:\\src' })).toBe(false);
+    expect(ruleMatches('PowerShell(npm:*)', 'PowerShell', { command: 'npm test; Remove-Item x' })).toBe(false);
+    expect(ruleMatches('PowerShell(npm:*)', 'PowerShell', { command: 'npm test\r\nRemove-Item x' })).toBe(false);
+    expect(ruleMatches('PowerShell(npm:*)', 'Bash', { command: 'npm test' })).toBe(false);
   });
 });
 

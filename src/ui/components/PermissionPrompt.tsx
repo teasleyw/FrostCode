@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { PromptAnswer, PromptRequest, QuestionSpec } from '../../core/permissions.js';
+import { isShellTool, type PromptAnswer, type PromptRequest, type QuestionSpec } from '../../core/permissions.js';
 import { renderMarkdown } from '../markdown.js';
 import { displayPath, proposedPatch, toolHeader } from '../tools.js';
 import { DiffView } from './Diff.js';
@@ -94,13 +94,14 @@ function ToolPrompt({ request, cwd, width, onAnswer }: Props & { request: Extrac
   const isEdit = toolName === 'Edit' || toolName === 'MultiEdit' || toolName === 'Write' || toolName === 'NotebookEdit';
   const file = typeof input.file_path === 'string' ? displayPath(input.file_path, cwd) : '';
   const { verb, arg } = toolHeader(toolName, input, cwd);
+  const isShell = isShellTool(toolName);
   const title =
-    toolName === 'Bash' ? 'Bash command' : isEdit ? (toolName === 'Write' ? 'Create file' : 'Edit file') : request.title || `${verb} tool`;
+    isShell ? `${toolName} command` : isEdit ? (toolName === 'Write' ? 'Create file' : 'Edit file') : request.title || `${verb} tool`;
   const question = isEdit ? `Do you want to make this edit to ${file}?` : 'Do you want to proceed?';
   const alwaysLabel = isEdit
     ? 'Yes, allow all edits during this session'
-    : toolName === 'Bash'
-      ? `Yes, and don't ask again for ${request.ruleLabel.replace(/^Bash\((.*):\*\)$/, '$1')} commands this session`
+    : isShell
+      ? `Yes, and don't ask again for ${request.ruleLabel.replace(/^\w+\((.*):\*\)$/, '$1')} commands this session`
       : `Yes, and don't ask again for ${verb} this session`;
   const options: Option[] = [{ label: request.sensitive ? 'Yes, run this call' : 'Yes', answer: { kind: 'allow' } }];
   if (request.allowAlways) options.push({ label: alwaysLabel, answer: { kind: 'allow', always: true } });
@@ -121,7 +122,7 @@ function ToolPrompt({ request, cwd, width, onAnswer }: Props & { request: Extrac
         {title}
       </Text>
       <Box flexDirection="column" marginY={1} marginLeft={2}>
-        {toolName === 'Bash' ? (
+        {isShell ? (
           <>
             <Text>{String(input.command ?? '')}</Text>
             {input.description ? <Text dimColor>{String(input.description)}</Text> : null}

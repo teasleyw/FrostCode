@@ -7,6 +7,12 @@ import type { HookCallback, HookCallbackMatcher, PermissionMode } from '@anthrop
  */
 const FILESYSTEM_COMMANDS = new Set(['mkdir', 'touch', 'rm', 'rmdir', 'mv', 'cp', 'sed', 'ln', 'chmod', 'tee', 'truncate', 'install', 'dd']);
 
+/** The same for the PowerShell tool on Windows: cmdlets and their aliases, lower-cased (PowerShell ignores case). */
+const POWERSHELL_FILESYSTEM_COMMANDS = new Set([
+  ...['remove-item', 'move-item', 'copy-item', 'new-item', 'rename-item', 'set-content', 'add-content', 'clear-content', 'out-file', 'tee-object', 'expand-archive'],
+  ...['rm', 'rmdir', 'del', 'erase', 'rd', 'ri', 'mv', 'move', 'mi', 'cp', 'copy', 'cpi', 'ni', 'mkdir', 'md', 'ren', 'rni', 'sc', 'ac', 'clc', 'tee'],
+]);
+
 /** True when any simple command in a shell line starts with a filesystem-changing command. */
 export function runsFilesystemCommand(command: string): boolean {
   for (const segment of command.split(/&&|\|\||[;|&\n()`]|\$\(/)) {
@@ -20,6 +26,15 @@ export function runsFilesystemCommand(command: string): boolean {
   return false;
 }
 
+/** runsFilesystemCommand for a PowerShell line: script blocks ({ }) and the call operator (&) start commands too. */
+export function runsPowerShellFilesystemCommand(command: string): boolean {
+  for (const segment of command.split(/&&|\|\||[;|&\r\n(){}]|\$\(/)) {
+    const word = segment.trim().split(/\s+/)[0];
+    if (word && POWERSHELL_FILESYSTEM_COMMANDS.has(word.split(/[\\/]/).pop()!.toLowerCase().replace(/\.exe$/, ''))) return true;
+  }
+  return false;
+}
+
 /**
  * PreToolUse hook that keeps shell commands under normal approval while acceptEdits is on.
  * It never allows anything: it either says nothing (normal rules apply) or forces "ask",
@@ -27,11 +42,12 @@ export function runsFilesystemCommand(command: string): boolean {
  */
 export function acceptEditsShellGuard(currentMode: () => PermissionMode): HookCallbackMatcher {
   const hook: HookCallback = async (input) => {
-    if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Bash') return {};
+    if (input.hook_event_name !== 'PreToolUse' || (input.tool_name !== 'Bash' && input.tool_name !== 'PowerShell')) return {};
     const mode = input.permission_mode ?? currentMode();
     if (mode !== 'acceptEdits' && currentMode() !== 'acceptEdits') return {};
     const command = (input.tool_input as { command?: unknown } | null)?.command;
-    if (typeof command !== 'string' || !runsFilesystemCommand(command)) return {};
+    const changesFiles = input.tool_name === 'PowerShell' ? runsPowerShellFilesystemCommand : runsFilesystemCommand;
+    if (typeof command !== 'string' || !changesFiles(command)) return {};
     return {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
@@ -40,5 +56,5 @@ export function acceptEditsShellGuard(currentMode: () => PermissionMode): HookCa
       },
     };
   };
-  return { matcher: 'Bash', hooks: [hook] };
+  return { matcher: 'Bash|PowerShell', hooks: [hook] };
 }

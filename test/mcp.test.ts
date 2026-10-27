@@ -81,6 +81,14 @@ describe('MCP discovery (read-only)', () => {
     const m = new McpManager(f.project, { roots: f.roots, storeFile: join(f.home, 'frost-mcp.json') });
     expect(JSON.stringify(m.entries())).not.toMatch(/msy_secret|secret-token|"abc"/);
   });
+
+  it('finds a project keyed the way Claude Code writes it on Windows (C:/x/y)', () => {
+    const f = fixture();
+    const claudeJson = JSON.parse(readFileSync(join(f.home, '.claude.json'), 'utf8'));
+    claudeJson.projects = { [f.project.replace(/\\/g, '/')]: claudeJson.projects[f.project] };
+    write(join(f.home, '.claude.json'), claudeJson);
+    expect(discoverMcpServers(join(f.project, 'sub'), f.roots).find((s) => s.name === 'shared')?.scope).toBe('local');
+  });
 });
 
 function fakeRuntime(status: McpServerStatus[] = []) {

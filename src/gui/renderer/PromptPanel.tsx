@@ -54,7 +54,7 @@ function ToolPrompt({ prompt, onAnswer }: { prompt: Extract<GuiPrompt, { kind: '
   const deny = () => onAnswer({ kind: 'deny', feedback: feedback.trim() || undefined });
   useNumberKeys({ '1': allow, ...(prompt.allowAlways ? { '2': always } : {}), [prompt.allowAlways ? '3' : '2']: () => setDenying(true) });
 
-  const command = prompt.toolName === 'Bash' && typeof prompt.input.command === 'string' ? prompt.input.command : null;
+  const command = (prompt.toolName === 'Bash' || prompt.toolName === 'PowerShell') && typeof prompt.input.command === 'string' ? prompt.input.command : null;
   const isEdit = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(prompt.toolName);
   const alwaysLabel = isEdit ? 'Yes, allow all edits this session' : `Yes, and don’t ask again for ${prompt.ruleLabel}`;
 

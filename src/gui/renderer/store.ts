@@ -80,6 +80,15 @@ export function ipcErrorMessage(e: unknown): string {
   return msg.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 }
 
+/** The menu accelerators are CmdOrCtrl: ⌘ on macOS, Ctrl on Windows and Linux. */
+export const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
+
+/** A Cmd/Ctrl shortcut as the platform writes it: ⌘N / Ctrl+N (spaced, ⌘ N / Ctrl + N, in the shortcuts list). */
+export function modKey(key: string, spaced = false): string {
+  if (IS_MAC) return spaced ? `⌘ ${key}` : `⌘${key}`;
+  return spaced ? `Ctrl + ${key}` : `Ctrl+${key}`;
+}
+
 export const MODES = [
   { value: 'default', label: 'Ask', title: 'Ask before edits and commands' },
   { value: 'acceptEdits', label: 'Auto-edit', title: 'Accept file edits automatically' },

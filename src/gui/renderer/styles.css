@@ -19,7 +19,7 @@
   --rem-bg: rgba(255, 120, 120, 0.12);
   --radius: 8px;
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
-  --mono: 'SF Mono', ui-monospace, Menlo, 'JetBrains Mono', monospace;
+  --mono: 'SF Mono', ui-monospace, Menlo, 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
   color-scheme: dark;
 }
 
@@ -119,6 +119,9 @@ kbd {
 .topbar {
   height: 46px; flex: none; display: flex; align-items: center; gap: 12px;
   padding: 0 14px; border-bottom: 1px solid var(--border);
+  /* Windows / Linux: the title bar overlay's window buttons sit at the right end; the titlebar-area
+     values exclude them. Unset (macOS), this is the plain 14px. */
+  padding-right: calc(14px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
 }
 .project-picker { position: relative; }
 .project-btn {

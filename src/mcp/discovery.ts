@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 import type { McpServerConfigForProcessTransport } from '@anthropic-ai/claude-agent-sdk';
 
 /**
@@ -107,12 +107,20 @@ export function normalizeConfig(raw: unknown): { config: McpServerConfigForProce
   return { config: null, transport: null, problem: `"${type}" servers are not supported here (stdio, http and sse are)` };
 }
 
-/** ~/.claude.json keys projects by folder; the closest ancestor of cwd with an entry applies. */
+/**
+ * ~/.claude.json keys projects by folder; the closest ancestor of cwd with an entry applies.
+ * On Windows Claude Code writes C:/x/y (older versions C:\x\y, and both can be present), and
+ * the file system ignores case, so keys are compared in one form there; the C:/ form wins.
+ */
 function closestProjectEntry(projects: Record<string, any> | undefined, cwd: string): { path: string; entry: any } | null {
   if (!projects || typeof projects !== 'object') return null;
+  const norm = (p: string) => (process.platform === 'win32' ? p.replace(/\\/g, '/').toLowerCase() : p);
+  const keys = new Map<string, string>();
+  for (const k of Object.keys(projects)) if (!keys.has(norm(k)) || k.includes('/')) keys.set(norm(k), k);
   let dir = resolve(cwd);
   for (;;) {
-    if (projects[dir]) return { path: dir, entry: projects[dir] };
+    const key = keys.get(norm(dir));
+    if (key && projects[key]) return { path: key, entry: projects[key] };
     const up = dirname(dir);
     if (up === dir) return null;
     dir = up;
@@ -137,14 +145,20 @@ function slug(name: string): string {
 
 const UV_CANDIDATES = (home: string) => [join(home, '.local', 'bin', 'uv'), '/opt/homebrew/bin/uv', '/usr/local/bin/uv', join(home, '.cargo', 'bin', 'uv')];
 
+/** A command's file names on disk: on Windows a bare name needs one of PATHEXT's extensions (uv -> uv.exe). */
+function executableNames(p: string): string[] {
+  if (process.platform !== 'win32' || extname(p)) return [p];
+  return (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((ext) => p + ext.toLowerCase());
+}
+
 /** Absolute path for a bare command name, so servers start even when the app was launched without a shell PATH. */
 function resolveCommand(cmd: string, home: string): string {
-  if (cmd.includes('/')) return cmd;
-  const dirs = [...(process.env.PATH ?? '').split(':').filter(Boolean), join(home, '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin'];
-  if (cmd === 'uv') for (const c of UV_CANDIDATES(home)) if (existsSync(c)) return c;
+  if (cmd.includes('/') || cmd.includes(sep) || isAbsolute(cmd)) return cmd;
+  const extra = process.platform === 'win32' ? [join(home, '.local', 'bin')] : [join(home, '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin'];
+  const dirs = [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...extra];
+  if (cmd === 'uv') for (const c of UV_CANDIDATES(home).flatMap(executableNames)) if (existsSync(c)) return c;
   for (const d of dirs) {
-    const p = join(d, cmd);
-    if (existsSync(p)) return p;
+    for (const p of executableNames(join(d, cmd))) if (existsSync(p)) return p;
   }
   return cmd;
 }

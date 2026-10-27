@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { GuiProjectGroup, GuiSession } from '../protocol.js';
 import { IconAsk, IconCheck, IconChevron, IconPencil, IconPlus, IconSearch, IconTrash } from './icons.js';
-import { filterGroups, relativeTime } from './store.js';
+import { filterGroups, IS_MAC, modKey, relativeTime } from './store.js';
 
 const PER_GROUP = 8;
 
@@ -56,7 +56,7 @@ export function Sidebar(p: Props) {
   let groups = filterGroups(p.groups, p.query);
   // The open conversation's project always shows, even before its first message is saved.
   if (!searching && !groups.some((g) => g.cwd === p.activeCwd)) {
-    const name = p.activeCwd.split('/').filter(Boolean).pop() ?? p.activeCwd;
+    const name = p.activeCwd.split(/[\\/]/).filter(Boolean).pop() ?? p.activeCwd;
     groups = [{ cwd: p.activeCwd, name, label: p.activeCwd, exists: true, lastActivity: Date.now(), sessions: [] }, ...groups];
   }
 
@@ -81,8 +81,8 @@ export function Sidebar(p: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-top drag">
-        <button className="btn-new no-drag" onClick={() => p.onNew()} title="New conversation (⌘N)">
-          <IconPlus /> New conversation <kbd>⌘N</kbd>
+        <button className="btn-new no-drag" onClick={() => p.onNew()} title={`New conversation (${modKey('N')})`}>
+          <IconPlus /> New conversation <kbd>{modKey('N')}</kbd>
         </button>
         <label className="search no-drag">
           <IconSearch />
@@ -94,7 +94,7 @@ export function Sidebar(p: Props) {
             placeholder="Search conversations"
             spellCheck={false}
           />
-          {!p.query && <kbd>⌘K</kbd>}
+          {!p.query && <kbd>{modKey('K')}</kbd>}
         </label>
       </div>
       <nav className="sessions" aria-label="Conversations">
@@ -227,7 +227,8 @@ function SessionRow({ s, status, now, active, renaming, startRename, stopRename,
         onKeyDown={(e) => {
           if (e.key === 'Enter') onOpen();
           if (e.key === 'F2') startRename();
-          if (e.key === 'Backspace' && e.metaKey) onDelete();
+          // ⌘⌫ on macOS, Delete elsewhere (the main process confirms before anything is removed).
+          if (IS_MAC ? e.key === 'Backspace' && e.metaKey : e.key === 'Delete') onDelete();
         }}
         title={`${s.title}\n${new Date(s.lastModified).toLocaleString()}${s.gitBranch ? ` · ${s.gitBranch}` : ''}`}
       >
@@ -235,7 +236,7 @@ function SessionRow({ s, status, now, active, renaming, startRename, stopRename,
         <span className="session-title">{s.title}</span>
         <span className="session-date">{relativeTime(s.lastModified, now)}</span>
         <span className="session-actions">
-          <button className="icon-btn" onClick={(e) => (e.stopPropagation(), startRename())} title="Rename (⌘R)">
+          <button className="icon-btn" onClick={(e) => (e.stopPropagation(), startRename())} title={`Rename (${modKey('R')})`}>
             <IconPencil />
           </button>
           <button className="icon-btn" onClick={(e) => (e.stopPropagation(), onDelete())} title="Delete">

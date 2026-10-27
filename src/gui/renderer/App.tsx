@@ -4,7 +4,7 @@ import { Composer } from './Composer.js';
 import { McpPanel } from './McpPanel.js';
 import { PromptPanel } from './PromptPanel.js';
 import { Sidebar } from './Sidebar.js';
-import { applyPatch, emptyTranscript, filterGroups, flatSessions, ipcErrorMessage, nextMode, transcriptList, type TranscriptState } from './store.js';
+import { applyPatch, emptyTranscript, filterGroups, flatSessions, ipcErrorMessage, IS_MAC, modKey, nextMode, transcriptList, type TranscriptState } from './store.js';
 import { TopBar } from './TopBar.js';
 import { Transcript } from './Transcript.js';
 
@@ -13,15 +13,15 @@ const SHORTCUTS: [string, string][] = [
   ['Shift + Enter', 'New line'],
   ['Esc', 'Stop the running turn'],
   ['Shift + Tab', 'Cycle mode: Ask → Auto-edit → Plan → Auto'],
-  ['⌘ N', 'New conversation'],
-  ['⌘ O', 'Open project folder'],
-  ['⌘ K', 'Search conversations'],
-  ['⌘ R', 'Rename conversation'],
-  ['⌘ [  /  ⌘ ]', 'Previous / next conversation'],
-  ['⌘ L', 'Focus the message box'],
-  ['⌘ .', 'Stop'],
+  [modKey('N', true), 'New conversation'],
+  [modKey('O', true), 'Open project folder'],
+  [modKey('K', true), 'Search conversations'],
+  [modKey('R', true), 'Rename conversation'],
+  [`${modKey('[', true)}  /  ${modKey(']', true)}`, 'Previous / next conversation'],
+  [modKey('L', true), 'Focus the message box'],
+  [modKey('.', true), 'Stop'],
   ['1 / 2 / 3', 'Answer a permission prompt'],
-  ['⌘ /', 'Show this list'],
+  [modKey('/', true), 'Show this list'],
 ];
 
 export function App() {
@@ -102,7 +102,7 @@ export function App() {
           e.preventDefault();
           void call(api.setMode(nextMode(s.mode)));
         }
-      } else if (e.metaKey && (e.key === '[' || e.key === ']')) {
+      } else if ((IS_MAC ? e.metaKey : e.ctrlKey) && (e.key === '[' || e.key === ']')) {
         e.preventDefault();
         const list = flatSessions(filterGroups(groupsRef.current, queryRef.current));
         if (!list.length) return;

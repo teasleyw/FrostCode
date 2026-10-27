@@ -28,7 +28,8 @@ describe('saved accounts', () => {
     useAccount('env');
     expect(buildAgentEnv().ANTHROPIC_API_KEY).toBe(process.env.ANTHROPIC_API_KEY);
 
-    expect(statSync(join(frostHome(), 'account-keys.json')).mode & 0o777).toBe(0o600);
+    // Windows has no Unix modes (the file is guarded by the profile folder's ACL instead).
+    if (process.platform !== 'win32') expect(statSync(join(frostHome(), 'account-keys.json')).mode & 0o777).toBe(0o600);
     expect(JSON.stringify(listAccounts())).not.toContain('sk-ant');
   });
 

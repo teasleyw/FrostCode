@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GuiMode, GuiSnapshot, RecentProject } from '../protocol.js';
 import { IconChevron, IconFolder } from './icons.js';
-import { MODES } from './store.js';
+import { MODES, modKey } from './store.js';
 
 interface Props {
   snap: GuiSnapshot;
@@ -41,7 +41,7 @@ export function TopBar({ snap, onModel, onMode, onOpenProject, onChooseProject, 
   return (
     <header className="topbar drag">
       <div className="project-picker no-drag" ref={box}>
-        <button className="project-btn" onClick={toggleMenu} title={`${snap.projectLabel} — choose project (⌘O)`} aria-haspopup="menu" aria-expanded={!!menu}>
+        <button className="project-btn" onClick={toggleMenu} title={`${snap.projectLabel} — choose project (${modKey('O')})`} aria-haspopup="menu" aria-expanded={!!menu}>
           <IconFolder />
           <span className="project-name">{snap.projectName}</span>
           <span className="chev down">
@@ -75,7 +75,7 @@ export function TopBar({ snap, onModel, onMode, onOpenProject, onChooseProject, 
               }}
             >
               <span className="menu-main">Open folder…</span>
-              <kbd>⌘O</kbd>
+              <kbd>{modKey('O')}</kbd>
             </button>
           </div>
         )}

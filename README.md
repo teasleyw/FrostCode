@@ -22,7 +22,7 @@ with an [Ink](https://github.com/vadimdemedes/ink) interface. It authenticates *
 
 ## Install
 
-Requirements: Node.js 20+, macOS or Linux, an Anthropic API key.
+Requirements: Node.js 20+, macOS, Linux or Windows, an Anthropic API key.
 
 ```bash
 cd frostcode
@@ -33,6 +33,26 @@ frostcode
 ```
 
 Without `npm link`, run `./bin/frostcode.js` or `npm run dev` (runs from source with tsx).
+
+### Windows
+
+The same steps work in PowerShell; only setting the key differs:
+
+```powershell
+cd FrostCode
+npm install
+npm link
+$env:ANTHROPIC_API_KEY = "sk-ant-..."   # this window only; setx ANTHROPIC_API_KEY sk-ant-... for new windows
+frostcode                                # or: frostcode gui
+```
+
+- The agent runtime gives Claude a **PowerShell** tool on Windows, and a **Bash** tool too when Git for
+  Windows (Git Bash) is installed. Permission rules treat both alike: "don't ask again" is scoped to the
+  command's first word and never approves a chained command.
+- Saved account keys (`frostcode account add`) go to `%USERPROFILE%\.frostcode\account-keys.json`,
+  protected by your user profile's permissions (there is no Keychain).
+- The desktop app opens with `frostcode gui`. `npm run install-app` (an Applications bundle) and
+  `npm run e2e` (bash + expect) are macOS / Linux only.
 
 ## Usage
 
@@ -119,7 +139,8 @@ frostcode account list            # ● marks the active one; "env" is the shell
 In a session (terminal or desktop app), `/account` lists them and `/account work` switches: the runtime
 restarts on the new key and resumes the same conversation. The choice is remembered for the next launch
 (`frostcode account use <name>` sets it from a shell). Saved keys live in the macOS login Keychain
-(service `frostcode-account`), or `~/.frostcode/account-keys.json` (mode 600) on other systems;
+(service `frostcode-account`), or `~/.frostcode/account-keys.json` (mode 600; on Windows, guarded by
+the user profile's permissions) on other systems;
 `~/.frostcode/accounts.json` holds only the names.
 
 FrostCode does not run the interactive Claude Code CLI. The Agent SDK itself drives its bundled agent

@@ -19,6 +19,7 @@ prepareProcessEnv();
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererDir = join(here, 'renderer');
+const isMac = process.platform === 'darwin';
 const indexUrl = pathToFileURL(join(rendererDir, 'index.html')).href;
 
 app.setName('FrostCode');
@@ -153,8 +154,12 @@ function createWindow(): BrowserWindow {
     minHeight: 480,
     title: 'FrostCode',
     backgroundColor: '#0d0f13',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 14 },
+    // The top bar is the title bar. macOS draws its traffic lights over the sidebar's top; on Windows and
+    // Linux a hidden title bar has no window buttons at all unless the overlay draws them at the top bar's
+    // right end (45px: the top bar less its bottom border, which stays visible under the buttons).
+    ...(isMac
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
+      : { titleBarStyle: 'hidden' as const, titleBarOverlay: { color: '#0d0f13', symbolColor: '#b4bac4', height: 45 } }),
     show: false,
     webPreferences: {
       preload: join(here, 'preload.cjs'),
@@ -188,8 +193,13 @@ function buildMenu(): void {
   const run = (fn: () => Promise<unknown>) => () => {
     fn().catch((e) => dialog.showErrorBox('FrostCode', redact((e as Error).message)));
   };
+  // The bar itself only shows on macOS (a hidden title bar has no menu bar elsewhere), but every
+  // platform gets the accelerators. Hide / Hide Others are macOS roles; Quit moves to File elsewhere.
+  const appMenu: Electron.MenuItemConstructorOptions[] = isMac
+    ? [{ label: 'FrostCode', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { type: 'separator' }, { role: 'quit' }] }]
+    : [];
   const template: Electron.MenuItemConstructorOptions[] = [
-    { label: 'FrostCode', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { type: 'separator' }, { role: 'quit' }] },
+    ...appMenu,
     {
       label: 'File',
       submenu: [
@@ -200,6 +210,7 @@ function buildMenu(): void {
         { label: 'Search Conversations', accelerator: 'CmdOrCtrl+K', click: cmd('focus-search') },
         { type: 'separator' },
         { role: 'close' },
+        ...(isMac ? [] : [{ role: 'quit' as const }]),
       ],
     },
     { role: 'editMenu' },

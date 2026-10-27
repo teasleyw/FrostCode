@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { agentConfigDir } from '../../src/config/env.js';
 
-export const makeProject = (prefix = 'fc-gui-') => realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+/** Real path the way the runtime resolves it (native: on Windows 8.3 names like WILLIA~1 are expanded too). */
+export const makeProject = (prefix = 'fc-gui-') => realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
 
 /** The runtime's project folder name for a cwd (every non-alphanumeric character becomes '-'). */
 export function projectFolder(cwd: string): string {
