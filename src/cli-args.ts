@@ -8,6 +8,7 @@ Usage
   frostcode -p "prompt" [options]       run one prompt non-interactively and print the result
   frostcode codex [all|show <id>]       list unfinished OpenAI Codex sessions (read-only)
   frostcode gui [dir] [--wait]          open the desktop app (reopens your last conversation)
+  frostcode account [list|add|use|remove] [name]  manage saved API keys (switch in-session with /account)
 
 Options
   -m, --model <id>                      model to use (e.g. claude-sonnet-5-5, opus, haiku)
@@ -23,7 +24,7 @@ Options
   -v, --version                         print version
   -h, --help                            show this help
 
-Requires ANTHROPIC_API_KEY. FrostCode keeps its own state in ~/.frostcode.`;
+Requires ANTHROPIC_API_KEY or a saved account. FrostCode keeps its own state in ~/.frostcode.`;
 
 export interface Args {
   prompt: string;
@@ -44,7 +45,7 @@ const MODES: PermissionMode[] = ['default', 'acceptEdits', 'plan', 'bypassPermis
 export function parseArgs(argv: string[]): Args {
   const a: Args = { prompt: '', continueLast: false, allowBypass: false, print: false, yes: false, json: false };
   const rest: string[] = [];
-  if (argv[0] === 'codex' || argv[0] === 'gui') return { ...a, sub: argv };
+  if (argv[0] === 'codex' || argv[0] === 'gui' || argv[0] === 'account') return { ...a, sub: argv };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = () => {

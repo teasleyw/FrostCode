@@ -8,6 +8,7 @@ import { deleteSavedSession, listAllSavedSessions, renameSavedSession, type Save
 import type { PromptAnswer } from '../core/permissions.js';
 import { loadProjects, rememberProject, resolveProjectPath, shortenPath } from '../core/projects.js';
 import type { TranscriptItem } from '../core/transcript.js';
+import type { McpAction, McpEntryView } from '../mcp/types.js';
 import { diffLines, isEditTool, patchFor, proposedPatch, toolHeader, toolSummary } from '../ui/tools.js';
 import type {
   DiffLine,
@@ -181,6 +182,29 @@ export function groupSessions(saved: SavedSession[], recent: { path: string; las
   return [...groups.values()].sort((a, b) => b.lastActivity - a.lastActivity);
 }
 
+/**
+ * Add live conversations the saved list does not have yet. The runtime lists a transcript only
+ * once a prompt is written to it, so a new conversation left mid-turn would otherwise vanish
+ * from the sidebar until its turn ends.
+ */
+export function withLiveSessions(groups: GuiProjectGroup[], live: GuiSession[]): GuiProjectGroup[] {
+  const known = new Set(groups.flatMap((g) => g.sessions.map((s) => s.id)));
+  const missing = live.filter((s) => !known.has(s.id));
+  if (!missing.length) return groups;
+  const out = groups.map((g) => ({ ...g, sessions: [...g.sessions] }));
+  for (const s of missing) {
+    let g = out.find((x) => x.cwd === s.cwd);
+    if (!g) {
+      g = { cwd: s.cwd, name: basename(s.cwd) || s.cwd, label: shortenPath(s.cwd), exists: existsSync(s.cwd), lastActivity: 0, sessions: [] };
+      out.push(g);
+    }
+    g.sessions.unshift(s);
+    g.lastActivity = Math.max(g.lastActivity, s.lastModified);
+  }
+  for (const g of out) g.sessions.sort((a, b) => b.lastModified - a.lastModified);
+  return out.sort((a, b) => b.lastActivity - a.lastActivity);
+}
+
 // ---- backend ----------------------------------------------------------------
 
 export type BackendEvent =
@@ -338,6 +362,7 @@ export class GuiBackend {
     const entry = { unsubscribe: () => {}, lastId: ctrl.sessionId };
     entry.unsubscribe = ctrl.subscribe(() => this.onBackgroundChange(ctrl, entry));
     this.background.set(ctrl, entry);
+    void this.refreshSessions(); // it leaves the draft row: list it even before its transcript is saved
   }
 
   /** Bring a background conversation back into view, as it is right now. */
@@ -460,6 +485,7 @@ export class GuiBackend {
       models: (c?.models ?? []).map((m) => ({ value: m.value, displayName: m.displayName, description: m.description })),
       prompt: c?.pending[0] ? this.promptView(c.pending[0].request, cwd) : null,
       queuedPrompts: Math.max(0, (c?.pending.length ?? 0) - 1),
+      mcp: this.mcpCounts(),
       usage: {
         sessionUsd: usage?.sessionUsd ?? 0,
         contextTokens: usage?.contextTokens ?? 0,
@@ -484,6 +510,37 @@ export class GuiBackend {
     return { ...req, input, verb, arg: redact(arg), diff };
   }
 
+  private mcpCounts(): GuiSnapshot['mcp'] {
+    const entries = this.ctrl?.mcp.entries() ?? [];
+    return {
+      connected: entries.filter((e) => e.state === 'connected').length,
+      awaiting: entries.filter((e) => e.state === 'needs-approval' || e.state === 'changed').length,
+      failed: entries.filter((e) => e.state === 'failed' || e.state === 'needs-auth').length,
+    };
+  }
+
+  // ---- MCP ---------------------------------------------------------------------
+
+  private needCtrl(): AppController {
+    if (!this.ctrl) throw new Error('The conversation is still starting.');
+    return this.ctrl;
+  }
+
+  async mcpList(refresh = false): Promise<McpEntryView[]> {
+    const c = this.needCtrl();
+    if (refresh) c.mcp.refresh();
+    await c.mcp.refreshStatus().catch(() => {});
+    return c.mcp.entries();
+  }
+
+  async mcpAction(id: string, action: McpAction): Promise<string> {
+    return this.needCtrl().mcp.act(id, action);
+  }
+
+  async mcpTrust(server: string, tool: string, trusted: boolean): Promise<void> {
+    this.needCtrl().mcp.setToolTrusted(server, tool, trusted);
+  }
+
   initial(): GuiInitial {
     const transcript: TranscriptPatch = this.ctrl
       ? { reset: true, order: this.ctrl.transcript.items.map((i) => i.id), changed: this.ctrl.transcript.items.map((i) => toGuiItem(i, this.ctrl!.cwd)) }
@@ -495,12 +552,24 @@ export class GuiBackend {
 
   async refreshSessions(emit = true): Promise<GuiProjectGroup[]> {
     const saved = await listAllSavedSessions(1000);
-    this.sessions = groupSessions(saved, loadProjects());
+    this.sessions = withLiveSessions(groupSessions(saved, loadProjects()), this.liveSessions());
     if (emit && !this.closed) {
       this.opts.emit({ type: 'sessions', payload: this.sessions });
       this.opts.emit({ type: 'state', payload: this.snapshot() });
     }
     return this.sessions;
+  }
+
+  /** The open and background conversations that have an id and a typed message. */
+  private liveSessions(): GuiSession[] {
+    const out: GuiSession[] = [];
+    for (const c of [this.ctrl, ...this.background.keys()]) {
+      const first = c?.transcript.items.find((i) => i.kind === 'user');
+      if (!c?.sessionId || first?.kind !== 'user') continue;
+      const cwd = realOrSelf(c.cwd);
+      out.push({ id: c.sessionId, title: redact(first.text).replace(/\s+/g, ' ').trim().slice(0, 120), lastModified: c.busySince ?? Date.now(), cwd });
+    }
+    return out;
   }
 
   /** Conversations with a turn running, the open one included. */

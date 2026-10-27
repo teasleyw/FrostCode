@@ -9,9 +9,10 @@ interface Props {
   onMode(mode: GuiMode): void;
   onOpenProject(path: string): void;
   onChooseProject(): void;
+  onMcp(): void;
 }
 
-export function TopBar({ snap, onModel, onMode, onOpenProject, onChooseProject }: Props) {
+export function TopBar({ snap, onModel, onMode, onOpenProject, onChooseProject, onMcp }: Props) {
   const [menu, setMenu] = useState<RecentProject[] | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
@@ -83,6 +84,16 @@ export function TopBar({ snap, onModel, onMode, onOpenProject, onChooseProject }
         {snap.title ?? 'New conversation'}
       </div>
       <div className="topbar-controls no-drag">
+        <button
+          className="mcp-btn"
+          onClick={onMcp}
+          disabled={snap.phase !== 'ready'}
+          title={`MCP servers: ${snap.mcp.connected} connected${snap.mcp.awaiting ? `, ${snap.mcp.awaiting} awaiting approval` : ''}${snap.mcp.failed ? `, ${snap.mcp.failed} failing` : ''}`}
+        >
+          <span className={`dot ${snap.mcp.failed ? 'err' : snap.mcp.awaiting ? 'warn' : snap.mcp.connected ? 'ok' : ''}`} />
+          MCP{snap.mcp.connected ? ` ${snap.mcp.connected}` : ''}
+          {snap.mcp.awaiting ? <span className="badge">{snap.mcp.awaiting} new</span> : null}
+        </button>
         <div className="segmented" role="radiogroup" aria-label="Permission mode (Shift+Tab cycles)">
           {MODES.map((m) => (
             <button

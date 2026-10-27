@@ -39,21 +39,38 @@ export class MissingApiKeyError extends Error {
     super(
       'ANTHROPIC_API_KEY is not set. FrostCode bills to the Anthropic API, so export a key first:\n' +
         '  export ANTHROPIC_API_KEY=sk-ant-...\n' +
-        'Create one at https://platform.claude.com/settings/keys',
+        'Create one at https://platform.claude.com/settings/keys\n' +
+        'Or save one as a named account: frostcode account add <name>',
     );
   }
 }
 
 /** Key moved out of process.env by stashApiKey(); only this module can read it. */
 let stashedKey: string | undefined;
+/** Key of a saved account picked with /account (accounts.ts); wins over the shell's key. */
+let accountKey: string | undefined;
 
-function keyIn(env: NodeJS.ProcessEnv): string | undefined {
+function envKeyIn(env: NodeJS.ProcessEnv): string | undefined {
   const key = env.ANTHROPIC_API_KEY ?? (env === process.env ? stashedKey : undefined);
   return typeof key === 'string' && key.trim() ? key : undefined;
 }
 
+function keyIn(env: NodeJS.ProcessEnv): string | undefined {
+  return (env === process.env ? accountKey : undefined) ?? envKeyIn(env);
+}
+
 export function hasApiKey(env: NodeJS.ProcessEnv = process.env): boolean {
   return keyIn(env) !== undefined;
+}
+
+/** Whether the shell's own ANTHROPIC_API_KEY is set (the "env" account). */
+export function hasEnvApiKey(): boolean {
+  return envKeyIn(process.env) !== undefined;
+}
+
+/** Use a saved account's key for runtimes started from now on (undefined = back to ANTHROPIC_API_KEY). */
+export function selectAccountKey(key: string | undefined): void {
+  accountKey = key?.trim() || undefined;
 }
 
 /**
@@ -62,7 +79,7 @@ export function hasApiKey(env: NodeJS.ProcessEnv = process.env): boolean {
  * helper processes Electron launches later never inherit the key.
  */
 export function stashApiKey(): void {
-  const key = keyIn(process.env);
+  const key = envKeyIn(process.env);
   if (!key) return;
   stashedKey = key;
   delete process.env.ANTHROPIC_API_KEY;
@@ -96,7 +113,8 @@ const KEY_PATTERN = /sk-ant-[A-Za-z0-9_\-]{8,}/g;
 /** Mask anything that looks like an Anthropic key before it is shown or written. */
 export function redact(text: string, env: NodeJS.ProcessEnv = process.env): string {
   let out = text.replace(KEY_PATTERN, 'sk-ant-***');
-  const key = keyIn(env);
-  if (key && key.length >= 8) out = out.split(key).join('***');
+  for (const key of new Set([keyIn(env), envKeyIn(env)])) {
+    if (key && key.length >= 8) out = out.split(key).join('***');
+  }
   return out;
 }

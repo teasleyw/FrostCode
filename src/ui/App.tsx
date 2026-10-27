@@ -10,6 +10,7 @@ import { MessageView } from './components/MessageView.js';
 import { PromptInput, type Suggestion } from './components/PromptInput.js';
 import { PermissionPrompt } from './components/PermissionPrompt.js';
 import { SelectList, type SelectItem } from './components/SelectList.js';
+import { McpList, McpServerPage, McpToolsPage } from './components/McpScreen.js';
 import { SPINNER_FRAMES, SPINNER_WORDS, theme } from './theme.js';
 import { APP_VERSION, frostHome } from '../config/env.js';
 import { appendFileSync } from 'node:fs';
@@ -355,6 +356,12 @@ function OverlayView({ ctrl }: { ctrl: AppController }) {
           emptyText="No Codex sessions found"
         />
       );
+    case 'mcp':
+      return <McpList ctrl={ctrl} />;
+    case 'mcp-server':
+      return <McpServerPage ctrl={ctrl} id={o.id} />;
+    case 'mcp-tools':
+      return <McpToolsPage ctrl={ctrl} id={o.id} />;
     case 'codex-actions': {
       const s = o.session;
       const differentProject = s.cwd && s.cwd !== ctrl.cwd;

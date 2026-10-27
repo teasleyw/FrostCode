@@ -68,7 +68,7 @@ describe('tool display', () => {
     expect(toolHeader('Edit', { file_path: '/repo/src/a.ts' }, cwd)).toEqual({ verb: 'Update', arg: 'src/a.ts' });
     expect(toolHeader('Bash', { command: 'npm test' }, cwd)).toEqual({ verb: 'Bash', arg: 'npm test' });
     expect(toolHeader('Grep', { pattern: 'TODO', path: '/repo/src' }, cwd).arg).toBe('pattern: "TODO", path: "src"');
-    expect(toolHeader('mcp__github__get_issue', { id: '12' }, cwd).verb).toBe('github - get_issue');
+    expect(toolHeader('mcp__github__get_issue', { id: '12' }, cwd).verb).toBe('github · get_issue (MCP)');
     expect(displayPath('/elsewhere/x', cwd)).toBe('/elsewhere/x');
   });
 

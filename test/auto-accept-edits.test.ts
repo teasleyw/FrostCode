@@ -195,11 +195,11 @@ describe('the guard', () => {
 });
 
 describe('the CLI is unchanged', () => {
-  it('registers no hooks unless the host asks for the guard', async () => {
+  it('registers no shell guard unless the host asks for it (only the MCP approval hook)', async () => {
     const fake = makeFakeQuery(() => {});
     const ctrl = new AppController({ cwd: makeProject(), permissionMode: 'acceptEdits', queryFn: fake.queryFn, costStore: null });
     await ctrl.boot();
-    expect(fake.runs[0].options.hooks).toBeUndefined();
+    expect(fake.runs[0].options.hooks?.PreToolUse?.map((m) => m.matcher)).toEqual(['mcp__.*']);
     expect(fake.runs[0].options.permissionMode).toBe('acceptEdits');
     await ctrl.shutdown();
   });

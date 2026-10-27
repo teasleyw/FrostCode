@@ -4,12 +4,15 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, screen, session, shell, type
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { hasApiKey, MissingApiKeyError, prepareProcessEnv, redact, stashApiKey } from '../config/env.js';
+import { applySavedAccount } from '../config/accounts.js';
 import type { PromptAnswer } from '../core/permissions.js';
 import { GuiBackend, loadGuiPrefs, saveGuiPrefs, type BackendEvent } from './backend.js';
 import type { GuiCommand, GuiMode } from './protocol.js';
 
 // Before anything else (and before Chromium launches helper processes): take the key out of
 // the environment that child processes inherit. The agent runtime still receives it explicitly.
+const accountWarning = applySavedAccount();
+if (accountWarning) console.warn(accountWarning);
 const keyPresent = hasApiKey();
 stashApiKey();
 prepareProcessEnv();
@@ -105,6 +108,13 @@ function registerIpc(): void {
   handle('recentProjects', () => need().recentProjects());
   handle('chooseProject', () => chooseProject());
   handle('openProject', (p) => (isString(p, 4096) ? need().openProject(p) : bad()));
+  handle('mcpList', (refresh) => need().mcpList(refresh === true));
+  handle('mcpAction', (id, action) =>
+    isString(id, 4096) && (action === 'approve' || action === 'reject' || action === 'enable' || action === 'disable' || action === 'reconnect' || action === 'refresh')
+      ? need().mcpAction(id, action)
+      : bad(),
+  );
+  handle('mcpTrust', (server, tool, trusted) => (isString(server, 200) && isString(tool, 200) && typeof trusted === 'boolean' ? need().mcpTrust(server, tool, trusted) : bad()));
   handle('openExternal', async (url) => {
     if (!isString(url, 4096)) bad();
     const u = new URL(url as string);

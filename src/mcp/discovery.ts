@@ -214,7 +214,7 @@ function desktopExtensions(desktopDir: string, home: string): Omit<DiscoveredSer
  * extensions and config. Nothing here writes to any of those files.
  */
 export function discoverMcpServers(cwd: string, roots: DiscoveryRoots = {}): DiscoveredServer[] {
-  const home = roots.home ?? homedir();
+  const home = roots.home ?? (process.env.FROSTCODE_CLAUDE_HOME || homedir());
   const found: Omit<DiscoveredServer, 'shadowedBy'>[] = [];
   const add = (scope: McpScope, name: string, raw: unknown, source: string, idSuffix = '') => {
     const { config, transport, problem } = normalizeConfig(raw);
@@ -234,7 +234,9 @@ export function discoverMcpServers(cwd: string, roots: DiscoveryRoots = {}): Dis
 
   for (const [name, raw] of Object.entries((claudeJson?.mcpServers ?? {}) as Record<string, unknown>)) add('user', name, raw, claudeJsonFile);
 
-  const desktopDir = roots.desktopDir === undefined ? defaultDesktopDir(home) : roots.desktopDir;
+  // FROSTCODE_CLAUDE_DESKTOP_DIR moves the desktop app lookup (empty string turns it off; tests use that).
+  const envDesktop = process.env.FROSTCODE_CLAUDE_DESKTOP_DIR;
+  const desktopDir = roots.desktopDir !== undefined ? roots.desktopDir : envDesktop !== undefined ? envDesktop || null : defaultDesktopDir(home);
   if (desktopDir && existsSync(desktopDir)) {
     found.push(...desktopExtensions(desktopDir, home));
     const cfgFile = join(desktopDir, 'claude_desktop_config.json');

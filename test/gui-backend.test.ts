@@ -414,6 +414,31 @@ describe('several conversations running at once', () => {
     await until(() => backend.snapshot().finished.includes(s1));
   });
 
+  it('keeps a new conversation in the list after switching away mid-turn, before its transcript is saved', async () => {
+    const cwd = makeProject();
+    const saved = writeTranscript(cwd, [['older', 'ok']]);
+    let release = () => {};
+    const { backend, events } = backendFor({ defaultCwd: cwd, prefsFile: prefsIn(makeProject()) }, async (p, run) => {
+      run.emit(initMsg('fresh-1')); // the runtime has an id but has written nothing the list can read
+      await new Promise<void>((r) => (release = r));
+      run.emit(assistantText('done'));
+      run.emit(resultMsg(0.001, 'fresh-1'));
+    });
+    await backend.refreshSessions(false);
+    await backend.newSession(cwd);
+    const c = backend.controller!;
+    await backend.submit('brand new job');
+    await until(() => c.busy && c.sessionId === 'fresh-1');
+
+    await backend.openSession(saved, cwd);
+    await until(() => backend.sessionGroups.some((g) => g.sessions.some((s) => s.id === 'fresh-1')));
+    const row = backend.sessionGroups.flatMap((g) => g.sessions).find((s) => s.id === 'fresh-1')!;
+    expect(row.title).toBe('brand new job');
+    const last = events.filter((e) => e.type === 'sessions').at(-1)!;
+    expect((last.payload as typeof backend.sessionGroups).flatMap((g) => g.sessions).map((s) => s.id)).toContain('fresh-1');
+    release();
+  });
+
   it('deleting or quitting shuts background turns down', async () => {
     const { backend, cwd, s1, s2 } = twoSessions();
     await backend.refreshSessions(false);

@@ -5,3 +5,7 @@ import { join } from 'node:path';
 // Keep tests away from the real ~/.frostcode and the real API key.
 process.env.FROSTCODE_HOME = mkdtempSync(join(tmpdir(), 'frostcode-test-'));
 process.env.ANTHROPIC_API_KEY = 'sk-ant-test-0123456789abcdef';
+// ...and away from the real Claude Code / Claude desktop MCP configuration.
+process.env.FROSTCODE_CLAUDE_HOME = mkdtempSync(join(tmpdir(), 'frostcode-claude-home-'));
+process.env.FROSTCODE_CLAUDE_DESKTOP_DIR = '';
+process.env.FROSTCODE_KEYSTORE = 'file'; // saved accounts go to a temp file, never the real Keychain

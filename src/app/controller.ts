@@ -8,13 +8,19 @@ import { loadProjects, rememberProject, resolveProjectPath, shortenPath, type Pr
 import { COMMANDS, MODE_LABELS, findCommand, nextMode, parseSlash, type CommandContext, type CommandSpec } from '../commands/registry.js';
 import { buildHandoffPrompt, findCodexSession, listCodexSessions, type CodexSessionSummary } from '../codex/sessions.js';
 import { APP_VERSION } from '../config/env.js';
+import { activeAccount, listAccounts, useAccount } from '../config/accounts.js';
+import { McpManager, type McpManagerOptions } from '../mcp/manager.js';
+import { MCP_STATE_LABELS, type McpAction } from '../mcp/types.js';
 
 export type Overlay =
   | { type: 'model'; models: ModelInfo[] }
   | { type: 'resume'; sessions: SavedSession[]; costs: Record<string, number> }
   | { type: 'project'; projects: Project[] }
   | { type: 'codex'; sessions: CodexSessionSummary[]; unfinishedOnly: boolean }
-  | { type: 'codex-actions'; session: CodexSessionSummary };
+  | { type: 'codex-actions'; session: CodexSessionSummary }
+  | { type: 'mcp' }
+  | { type: 'mcp-server'; id: string }
+  | { type: 'mcp-tools'; id: string };
 
 export interface PendingPrompt {
   request: PromptRequest;
@@ -33,6 +39,8 @@ export interface ControllerOptions {
   /** Test seam: replace the SDK's query(). */
   queryFn?: ConstructorParameters<typeof AgentSession>[0]['queryFn'];
   costStore?: CostStore | null;
+  /** Where MCP configs and decisions are read from (tests point these at temp dirs). */
+  mcp?: McpManagerOptions;
   onExit?(): void;
 }
 
@@ -53,6 +61,8 @@ export class AppController implements PromptHost {
   readonly cost: CostTracker;
   readonly permissions: PermissionController;
   session!: AgentSession;
+  /** MCP servers for the current project: discovery, approvals, live status. */
+  mcp: McpManager;
   cwd: string;
   mode: PermissionMode;
   model: string | undefined;
@@ -66,6 +76,7 @@ export class AppController implements PromptHost {
   onClearScreen: () => void = () => {};
   private listeners = new Set<() => void>();
   private unsubscribeSession: (() => void) | null = null;
+  private unsubscribeMcp: (() => void) | null = null;
 
   constructor(private readonly opts: ControllerOptions) {
     this.cwd = opts.cwd;
@@ -79,6 +90,14 @@ export class AppController implements PromptHost {
       this.emit();
     };
     this.transcript.subscribe(() => this.emit());
+    this.mcp = this.makeMcp(this.cwd);
+  }
+
+  private makeMcp(cwd: string): McpManager {
+    this.unsubscribeMcp?.();
+    const m = new McpManager(cwd, this.opts.mcp);
+    this.unsubscribeMcp = m.subscribe(() => this.emit());
+    return m;
   }
 
   subscribe(fn: () => void): () => void {
@@ -110,12 +129,25 @@ export class AppController implements PromptHost {
     if (resume) await this.loadHistory(resume);
     this.startSession(resume);
     await this.handshake();
+    this.announceMcp();
+  }
+
+  /** Tell the user about servers found in their configs that FrostCode has not been allowed to use yet. */
+  private announceMcp(): void {
+    const waiting = this.mcp.awaitingApproval();
+    if (!waiting.length) return;
+    const names = waiting.map((s) => s.name).join(', ');
+    this.transcript.addSystem(
+      `Found ${waiting.length} MCP server${waiting.length === 1 ? '' : 's'} not yet approved for FrostCode: ${names}. They stay disconnected until you approve them in /mcp.`,
+      'warn',
+    );
   }
 
   private async handshake(): Promise<void> {
     try {
       const init = await this.session.initialize();
       this.models = init.models?.length ? init.models : FALLBACK_MODELS;
+      void this.mcp.refreshStatus().catch(() => {});
       const src = init.account?.apiKeySource;
       if (src && src !== 'ANTHROPIC_API_KEY') {
         this.transcript.addSystem(
@@ -141,8 +173,11 @@ export class AppController implements PromptHost {
       permissions: this.permissions,
       guardShellInAcceptEdits: this.opts.guardShellInAcceptEdits,
       currentMode: () => this.mode,
+      mcpServers: this.mcp.runtimeConfig(),
+      extraPreToolUse: [this.mcp.approvalHook((req, signal) => this.permissions.askExplicit(req, signal))],
       queryFn: this.opts.queryFn,
     });
+    this.mcp.attach(this.session);
     this.cost.beginSession(resume ?? null);
     this.unsubscribeSession = this.session.subscribe((msg) => this.onMessage(msg));
     this.session.onBusyChange = (busy) => {
@@ -164,6 +199,7 @@ export class AppController implements PromptHost {
     this.transcript.apply(msg);
     this.cost.apply(msg);
     if (msg.type === 'system' && msg.subtype === 'init') {
+      void this.mcp.refreshStatus().catch(() => {});
       this.mode = msg.permissionMode;
       if (!this.model) this.model = undefined;
     }
@@ -347,6 +383,7 @@ export class AppController implements PromptHost {
     }
     await this.session.close();
     this.cwd = path;
+    this.mcp = this.makeMcp(path);
     rememberProject(path);
     this.transcript.clear();
     this.onClearScreen();
@@ -354,6 +391,32 @@ export class AppController implements PromptHost {
     this.permissions.sessionRules.clear();
     this.startSession();
     this.transcript.addSystem(`Switched project to ${shortenPath(path)}`, 'success');
+    this.emit();
+  }
+
+  showAccounts(): void {
+    const lines = listAccounts().map((a) => `  ${a.active ? '●' : ' '} ${a.name.padEnd(16)} ${a.name === 'env' ? 'ANTHROPIC_API_KEY from the environment' : 'saved key'}${a.available ? '' : ' (not set)'}`);
+    this.transcript.addSystem(
+      ['API accounts', ...lines, '', '/account <name> switches and resumes this conversation on that key.', 'Add one from a shell: frostcode account add <name>'].join('\n'),
+    );
+  }
+
+  /** Switch the API key the runtime bills to, then restart it on the same conversation. */
+  async switchAccount(name: string): Promise<void> {
+    if (name === activeAccount()) {
+      this.transcript.addSystem(`Already using account "${name}".`);
+      return;
+    }
+    if (this.busy || this.pending.length) {
+      this.transcript.addSystem('Claude is working; press esc to interrupt or wait for the turn to finish, then switch.', 'warn');
+      return;
+    }
+    useAccount(name);
+    const resume = this.sessionId ?? undefined;
+    await this.session.close();
+    this.startSession(resume);
+    await this.handshake();
+    this.transcript.addSystem(`Switched to account "${name}"${resume ? '; this conversation continues on its key.' : '.'}`, 'success');
     this.emit();
   }
 
@@ -464,6 +527,56 @@ export class AppController implements PromptHost {
     this.sendToAgent(prompt, `Continue Codex session ${d.id.slice(0, 13)}: ${(d.firstUserMessage ?? '').replace(/\s+/g, ' ').slice(0, 120)}`);
   }
 
+  // ---- MCP ------------------------------------------------------------------
+
+  openMcp(id?: string): void {
+    this.mcp.refresh();
+    void this.mcp.refreshStatus().catch(() => {});
+    this.overlay = id ? { type: 'mcp-server', id } : { type: 'mcp' };
+    this.emit();
+  }
+
+  async mcpAct(ref: string, action: McpAction): Promise<void> {
+    try {
+      const msg = await this.mcp.act(ref, action);
+      this.transcript.addSystem(msg, action === 'reject' || action === 'disable' ? 'info' : 'success');
+    } catch (e) {
+      this.transcript.addSystem((e as Error).message, 'error');
+    }
+    this.emit();
+  }
+
+  showMcp(): void {
+    this.mcp.refresh();
+    const entries = this.mcp.entries();
+    if (!entries.length) {
+      this.transcript.addSystem('No MCP servers found in ~/.claude.json, .mcp.json or the Claude desktop app.');
+      return;
+    }
+    const lines = entries.map((e) => `  ${e.name.padEnd(16)} ${MCP_STATE_LABELS[e.state].padEnd(24)} ${e.scopeLabel}${e.tools.length ? ` · ${e.tools.length} tools` : ''}${e.detail ? ` · ${e.detail}` : ''}`);
+    this.transcript.addSystem(['MCP servers', ...lines, '', '/mcp to manage · /mcp approve <name> · /mcp tools <name>'].join('\n'));
+  }
+
+  showMcpTools(ref: string): void {
+    const s = this.mcp.find(ref);
+    const e = s && this.mcp.entries().find((x) => x.id === s.id);
+    if (!e) {
+      this.transcript.addSystem(`No MCP server named "${ref}".`, 'error');
+      return;
+    }
+    if (!e.tools.length) {
+      this.transcript.addSystem(`${e.name} is ${MCP_STATE_LABELS[e.state]}; its tools are listed once it is connected.`, 'warn');
+      return;
+    }
+    const lines = e.tools.map((t) => `  ${t.name.padEnd(36)} ${t.readOnly ? 'read-only' : t.destructive ? 'destructive' : 'can change things'}${t.sensitive ? (t.trusted ? ' · trusted' : ' · asks first') : ''}`);
+    this.transcript.addSystem([`${e.name} tools (${e.tools.length})`, ...lines].join('\n'));
+  }
+
+  setMcpToolTrusted(server: string, tool: string, trusted: boolean): void {
+    this.mcp.setToolTrusted(server, tool, trusted);
+    this.transcript.addSystem(trusted ? `${server} · ${tool} will run without asking first.` : `${server} · ${tool} will ask before each call.`, 'success');
+  }
+
   // ---- Info commands ------------------------------------------------------
 
   showCost(): void {
@@ -517,8 +630,9 @@ export class AppController implements PromptHost {
         `  session      ${i.sessionId ?? '(starts with your first message)'}`,
         `  model        ${this.modelLabel}`,
         `  mode         ${MODE_LABELS[this.mode] ?? this.mode}`,
-        `  auth         ${i.apiKeySource ?? 'ANTHROPIC_API_KEY (pending handshake)'} · API billing`,
+        `  auth         ${i.apiKeySource ?? 'ANTHROPIC_API_KEY (pending handshake)'} · API billing · account ${activeAccount()}`,
         `  tools        ${i.tools.length ? i.tools.length + ' available' : '(after first message)'}`,
+        `  mcp          ${this.mcp.activeServers().length} active · ${this.mcp.awaitingApproval().length} awaiting approval (/mcp)`,
       ].join('\n'),
     );
   }
@@ -544,6 +658,7 @@ export class AppController implements PromptHost {
 
   async shutdown(): Promise<void> {
     this.cancelPrompts();
+    this.unsubscribeMcp?.();
     await this.session?.close();
   }
 
@@ -565,6 +680,8 @@ export class AppController implements PromptHost {
     showCost: () => this.showCost(),
     showContext: () => this.showContext(),
     showStatus: () => this.showStatus(),
+    showAccounts: () => this.showAccounts(),
+    switchAccount: (n) => this.switchAccount(n),
     showPermissions: () => this.showPermissions(),
     clearPermissions: () => {
       this.permissions.sessionRules.clear();
@@ -572,6 +689,11 @@ export class AppController implements PromptHost {
     },
     rename: (t) => this.rename(t),
     passthrough: (t) => this.passthrough(t),
+    openMcp: (id) => this.openMcp(id),
+    mcpAct: (ref, a) => this.mcpAct(ref, a),
+    showMcp: () => this.showMcp(),
+    showMcpTools: (ref) => this.showMcpTools(ref),
+    setMcpToolTrusted: (s, t, on) => this.setMcpToolTrusted(s, t, on),
     commands: (): CommandSpec[] => COMMANDS,
   };
 }

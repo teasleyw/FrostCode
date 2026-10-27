@@ -74,6 +74,7 @@ frostcode codex [all|show <id>]       list unfinished OpenAI Codex sessions (rea
 | `/cost`, `/status` | tokens and estimated USD for the session / setup and auth source |
 | `/permissions [clear]` | tools you allowed for this session |
 | `/codex [all\|show\|import]` | browse unfinished Codex sessions and hand one to Claude |
+| `/mcp [...]` | manage MCP servers (see below) |
 | `/rename <title>`, `/exit` | name the session / quit |
 
 Commands the agent runtime provides (custom `.claude/commands`, skills) are passed through.
@@ -105,8 +106,46 @@ authenticates with `ANTHROPIC_API_KEY`; the handshake's reported credential sour
 shown in `/status` (a project `apiKeyHelper` would trigger a warning). The key is never written to
 disk or logs: errors, stderr and prompt history pass through a redactor.
 
+### Multiple API accounts
+
+Save a key per Anthropic Console account and switch between them without leaving the conversation:
+
+```bash
+frostcode account add work        # prompts for the key (hidden), or pipe it on stdin
+frostcode account add personal
+frostcode account list            # ● marks the active one; "env" is the shell's ANTHROPIC_API_KEY
+```
+
+In a session (terminal or desktop app), `/account` lists them and `/account work` switches: the runtime
+restarts on the new key and resumes the same conversation. The choice is remembered for the next launch
+(`frostcode account use <name>` sets it from a shell). Saved keys live in the macOS login Keychain
+(service `frostcode-account`), or `~/.frostcode/account-keys.json` (mode 600) on other systems;
+`~/.frostcode/accounts.json` holds only the names.
+
 FrostCode does not run the interactive Claude Code CLI. The Agent SDK itself drives its bundled agent
 runtime as a headless subprocess over a JSON protocol; that is how the official SDK works.
+
+### MCP servers
+
+FrostCode reuses the MCP servers you already configured; it never edits those files.
+
+- **Where servers come from** (closest wins when two share a name): `~/.claude.json` project servers
+  (Claude Code's local scope), the nearest `.mcp.json`, `~/.claude.json` user servers, the Claude
+  desktop app's installed extensions (e.g. Blender Lab's Blender MCP), then `claude_desktop_config.json`.
+  stdio, HTTP and SSE servers are supported.
+- **Approval first**: a newly found server stays disconnected until you approve it (`/mcp`, or the
+  **MCP** button in the desktop app). Approval is tied to the server's command / URL / env; if that
+  changes, it asks again. Decisions live in `~/.frostcode/mcp.json`.
+- **Connection** goes through the Agent SDK (`mcpServers` with `strictMcpConfig`, then
+  `setMcpServers` / `toggleMcpServer` / `reconnectMcpServer` / `mcpServerStatus`), so nothing you have
+  not approved connects on its own.
+- **Sensitive tools**: any MCP tool not marked read-only by its server asks before *each* call, in
+  every mode (Auto and Auto-edit included), with no "don't ask again". Read-only tools follow the
+  normal permission prompts. You can mark a tool trusted on the server's tools page.
+- **In the conversation** MCP calls show as `server · tool (MCP)` with their result.
+
+`/mcp` opens the manager; `/mcp list`, `/mcp approve|reject|enable|disable|reconnect|tools <server>`,
+`/mcp trust|untrust <server> <tool>` and `/mcp refresh` do the same from the prompt.
 
 ### OpenAI Codex sessions
 
@@ -122,6 +161,7 @@ and recent activity; "Switch to … and continue" opens the session's own projec
 | --- | --- |
 | `~/.frostcode/agent/` | runtime config dir: transcripts (`projects/`), plans |
 | `~/.frostcode/costs.json` | last known cost per session |
+| `~/.frostcode/mcp.json` | MCP server approvals and trusted tools |
 | `~/.frostcode/projects.json` | recent projects |
 | `~/.frostcode/prompt-history.json` | prompt history (redacted) |
 

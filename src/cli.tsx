@@ -10,6 +10,8 @@ import { runPrint } from './app/print.js';
 import { findCodexSession, listCodexSessions } from './codex/sessions.js';
 import { parseArgs, type Args } from './cli-args.js';
 import { launchGui } from './gui/launch.js';
+import { runAccountCommand } from './app/account-cli.js';
+import { applySavedAccount } from './config/accounts.js';
 
 async function runCodexCommand(argv: string[]): Promise<number> {
   const [, sub, ref] = argv;
@@ -46,8 +48,11 @@ async function main(): Promise<number> {
     return 2;
   }
   if (args.sub?.[0] === 'gui') return launchGui(args.sub.slice(1));
+  if (args.sub?.[0] === 'account') return runAccountCommand(args.sub.slice(1));
   if (args.sub) return runCodexCommand(args.sub);
 
+  const accountWarning = applySavedAccount();
+  if (accountWarning) console.error(accountWarning);
   if (!hasApiKey()) {
     console.error(new MissingApiKeyError().message);
     return 1;

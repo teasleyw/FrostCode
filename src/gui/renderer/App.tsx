@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GuiMode, GuiProjectGroup, GuiSession, GuiSnapshot, PromptAnswer } from '../protocol.js';
 import { Composer } from './Composer.js';
+import { McpPanel } from './McpPanel.js';
 import { PromptPanel } from './PromptPanel.js';
 import { Sidebar } from './Sidebar.js';
 import { applyPatch, emptyTranscript, filterGroups, flatSessions, ipcErrorMessage, nextMode, transcriptList, type TranscriptState } from './store.js';
@@ -33,6 +34,8 @@ export function App() {
   const [draft, setDraft] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showMcp, setShowMcp] = useState(false);
+  const closeMcp = useCallback(() => setShowMcp(false), []);
   const searchRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const snapRef = useRef(snap);
@@ -88,6 +91,7 @@ export function App() {
       if (!s) return;
       if (e.key === 'Escape' && !e.defaultPrevented) {
         if (showShortcuts) return setShowShortcuts(false);
+        if (showMcp) return;
         if (s.busy && !s.prompt) {
           e.preventDefault();
           void call(api.interrupt());
@@ -153,6 +157,7 @@ export function App() {
           onMode={(m: GuiMode) => void call(api.setMode(m))}
           onOpenProject={(p) => void call(api.openProject(p))}
           onChooseProject={() => void call(api.chooseProject())}
+          onMcp={() => setShowMcp(true)}
         />
         <Transcript items={items} projectLabel={snap.projectLabel} starting={snap.phase === 'starting'} />
         <div className="bottom">
@@ -186,6 +191,7 @@ export function App() {
           </div>
         </div>
       )}
+      {showMcp && <McpPanel onClose={closeMcp} />}
       {toast && (
         <div className="toast" role="alert" onClick={() => setToast(null)}>
           {toast}

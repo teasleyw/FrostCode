@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import type { PermissionMode, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { AgentSession } from '../core/session.js';
 import { PermissionController, PolicyHost } from '../core/permissions.js';
+import { McpManager } from '../mcp/manager.js';
 import { CostTracker, formatTokens, formatUsd } from '../core/cost.js';
 import { toolHeader, toolSummary } from '../ui/tools.js';
 import { renderMarkdown } from '../ui/markdown.js';
@@ -24,13 +25,18 @@ export interface PrintOptions {
 export async function runPrint(opts: PrintOptions): Promise<number> {
   const permissions = new PermissionController(new PolicyHost(opts.allowTools));
   const cost = new CostTracker();
+  // Only servers approved in FrostCode's /mcp connect; sensitive MCP calls follow --yes like other prompts.
+  const mcp = new McpManager(opts.cwd);
   const session = new AgentSession({
     cwd: opts.cwd,
     model: opts.model,
     permissionMode: opts.permissionMode,
     resume: opts.resume,
     permissions,
+    mcpServers: mcp.runtimeConfig(),
+    extraPreToolUse: [mcp.approvalHook((req, signal) => permissions.askExplicit(req, signal))],
   });
+  mcp.attach(session);
   cost.beginSession(opts.resume ?? null);
   const tools = new Map<string, { name: string; input: Record<string, unknown> }>();
   let exitCode = 0;
@@ -39,6 +45,7 @@ export async function runPrint(opts: PrintOptions): Promise<number> {
   const done = new Promise<void>((resolve) => {
     session.subscribe((msg: SDKMessage) => {
       cost.apply(msg);
+      if (msg.type === 'system' && msg.subtype === 'init') void mcp.refreshStatus().catch(() => {});
       if (opts.json) {
         process.stdout.write(JSON.stringify(msg) + '\n');
       } else if (msg.type === 'assistant' && !msg.parent_tool_use_id) {

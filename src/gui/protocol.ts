@@ -1,8 +1,9 @@
 // Types shared by the Electron main process and the renderer. No runtime code here:
 // the sandboxed preload cannot load local modules, and the renderer bundle only needs types.
 import type { PromptAnswer, PromptRequest } from '../core/permissions.js';
+import type { McpAction, McpEntryView } from '../mcp/types.js';
 
-export type { PromptAnswer, PromptRequest };
+export type { McpAction, McpEntryView, PromptAnswer, PromptRequest };
 
 /** Same shape as ui/tools.ts DiffLine (not imported: that module pulls in node:fs types). */
 export type DiffLine = { type: 'add' | 'remove' | 'context' | 'gap'; text: string; oldNo?: number; newNo?: number };
@@ -87,6 +88,8 @@ export interface GuiSnapshot {
   prompt: GuiPrompt | null;
   queuedPrompts: number;
   usage: { sessionUsd: number; contextTokens: number; contextWindow: number; turns: number };
+  /** MCP at a glance for the top bar: connected servers, and servers that need the user. */
+  mcp: { connected: number; awaiting: number; failed: number };
 }
 
 export interface GuiInitial {
@@ -130,5 +133,10 @@ export interface FrostApi {
   chooseProject(): Promise<void>;
   openProject(path: string): Promise<void>;
   openExternal(url: string): Promise<void>;
+  /** MCP servers for the open project (refresh = re-read the config files first; they are never written). */
+  mcpList(refresh?: boolean): Promise<McpEntryView[]>;
+  mcpAction(id: string, action: McpAction): Promise<string>;
+  /** Trusted tools run without the per-call approval prompt. */
+  mcpTrust(server: string, tool: string, trusted: boolean): Promise<void>;
   on<K extends keyof GuiEvents>(event: K, fn: (payload: GuiEvents[K]) => void): () => void;
 }

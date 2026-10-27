@@ -59,7 +59,7 @@ export function toolHeader(name: string, input: Record<string, unknown>, cwd: st
     default: {
       const mcp = /^mcp__(.+?)__(.+)$/.exec(name);
       const first = Object.values(input).find((v) => typeof v === 'string') as string | undefined;
-      return { verb: mcp ? `${mcp[1]} - ${mcp[2]}` : name, arg: first ? clip(first, 80) : '' };
+      return { verb: mcp ? `${mcp[1]} · ${mcp[2]} (MCP)` : name, arg: first ? clip(first, 80) : '' };
     }
   }
 }

@@ -1,4 +1,5 @@
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
+import type { McpAction } from '../mcp/types.js';
 
 export interface CommandContext {
   print(text: string, tone?: 'info' | 'warn' | 'error' | 'success'): void;
@@ -18,11 +19,19 @@ export interface CommandContext {
   showCost(): void;
   showContext(): Promise<void>;
   showStatus(): void;
+  showAccounts(): void;
+  switchAccount(name: string): Promise<void>;
   showPermissions(): void;
   clearPermissions(): void;
   rename(title: string): Promise<void>;
   /** Send text to the agent as-is (used for the runtime's own commands like /compact). */
   passthrough(text: string): void;
+  /** MCP manager screen (a server's page when given its name or id). */
+  openMcp(id?: string): void;
+  mcpAct(ref: string, action: McpAction): Promise<void>;
+  showMcp(): void;
+  showMcpTools(ref: string): void;
+  setMcpToolTrusted(server: string, tool: string, trusted: boolean): void;
   commands(): CommandSpec[];
 }
 
@@ -153,6 +162,23 @@ export const COMMANDS: CommandSpec[] = [
     },
   },
   {
+    name: 'mcp',
+    args: '[list | approve|reject|enable|disable|reconnect|tools <server> | trust|untrust <server> <tool> | refresh]',
+    description: 'Manage MCP servers from your Claude Code and Claude desktop configs (configs are never modified)',
+    async run(ctx, args) {
+      const [sub, name, tool] = args.split(/\s+/).filter(Boolean);
+      if (!sub) return ctx.openMcp();
+      if (sub === 'list') return ctx.showMcp();
+      if (sub === 'refresh') return ctx.mcpAct('', 'refresh');
+      if (sub === 'tools' && name) return ctx.showMcpTools(name);
+      if ((sub === 'trust' || sub === 'untrust') && name && tool) return ctx.setMcpToolTrusted(name, tool, sub === 'trust');
+      const actions: McpAction[] = ['approve', 'reject', 'enable', 'disable', 'reconnect'];
+      if (actions.includes(sub as McpAction) && name) return ctx.mcpAct(name, sub as McpAction);
+      if (!name && !actions.includes(sub as McpAction)) return ctx.openMcp(sub);
+      ctx.print('Usage: /mcp [list | approve|reject|enable|disable|reconnect|tools <server> | trust|untrust <server> <tool> | refresh]', 'error');
+    },
+  },
+  {
     name: 'compact',
     args: '[instructions]',
     description: 'Summarize the conversation to free context',
@@ -162,6 +188,16 @@ export const COMMANDS: CommandSpec[] = [
   },
   { name: 'context', description: 'Show context window usage', run: (ctx) => ctx.showContext() },
   { name: 'cost', aliases: ['usage'], description: 'Show token usage and estimated cost for this session', run: (ctx) => ctx.showCost() },
+  {
+    name: 'account',
+    aliases: ['accounts'],
+    args: '[name]',
+    description: 'List API accounts, or switch to one (keeps this conversation)',
+    async run(ctx, args) {
+      if (!args) return ctx.showAccounts();
+      await ctx.switchAccount(args);
+    },
+  },
   { name: 'status', description: 'Show model, auth source, project and session', run: (ctx) => ctx.showStatus() },
   {
     name: 'rename',

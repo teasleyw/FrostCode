@@ -27,6 +27,9 @@ const api: FrostApi = {
   chooseProject: invoke('chooseProject') as FrostApi['chooseProject'],
   openProject: invoke('openProject') as FrostApi['openProject'],
   openExternal: invoke('openExternal') as FrostApi['openExternal'],
+  mcpList: invoke('mcpList') as FrostApi['mcpList'],
+  mcpAction: invoke('mcpAction') as FrostApi['mcpAction'],
+  mcpTrust: invoke('mcpTrust') as FrostApi['mcpTrust'],
   on(event, fn) {
     if (!EVENTS.includes(event)) throw new Error(`Unknown event ${String(event)}`);
     // Never hand the raw IpcRendererEvent (it carries `sender`) to the page.

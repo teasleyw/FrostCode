@@ -102,7 +102,7 @@ function ToolPrompt({ request, cwd, width, onAnswer }: Props & { request: Extrac
     : toolName === 'Bash'
       ? `Yes, and don't ask again for ${request.ruleLabel.replace(/^Bash\((.*):\*\)$/, '$1')} commands this session`
       : `Yes, and don't ask again for ${verb} this session`;
-  const options: Option[] = [{ label: 'Yes', answer: { kind: 'allow' } }];
+  const options: Option[] = [{ label: request.sensitive ? 'Yes, run this call' : 'Yes', answer: { kind: 'allow' } }];
   if (request.allowAlways) options.push({ label: alwaysLabel, answer: { kind: 'allow', always: true } });
   options.push({ label: 'No, and tell Claude what to do differently (esc)', answer: 'feedback' });
 
