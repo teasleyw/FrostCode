@@ -63,6 +63,11 @@ export function hasApiKey(env: NodeJS.ProcessEnv = process.env): boolean {
   return keyIn(env) !== undefined;
 }
 
+/** The key runtimes are started with (saved account, else ANTHROPIC_API_KEY): for direct API calls such as the Work tab's daily list. */
+export function currentApiKey(): string | undefined {
+  return keyIn(process.env);
+}
+
 /** Whether the shell's own ANTHROPIC_API_KEY is set (the "env" account). */
 export function hasEnvApiKey(): boolean {
   return envKeyIn(process.env) !== undefined;

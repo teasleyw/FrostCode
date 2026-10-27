@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AppController } from '../src/app/controller.js';
-import { activeAccount, addAccount, applySavedAccount, listAccounts, removeAccount, useAccount } from '../src/config/accounts.js';
+import { activeAccount, addAccount, applySavedAccount, checkApiKey, listAccounts, removeAccount, useAccount } from '../src/config/accounts.js';
 import { buildAgentEnv, frostHome, redact, selectAccountKey } from '../src/config/env.js';
 import { initMsg, makeFakeQuery, resultMsg, until } from './helpers/fake-query.js';
 
@@ -54,6 +54,21 @@ describe('saved accounts', () => {
     const out = redact(`a ${WORK.slice(0)} b ${process.env.ANTHROPIC_API_KEY}`);
     expect(out).not.toContain(WORK);
     expect(out).not.toContain(process.env.ANTHROPIC_API_KEY!);
+  });
+});
+
+describe('checking a key before it is saved', () => {
+  it('rejects a malformed key without calling Anthropic, and explains a rejected one', async () => {
+    let called = 0;
+    const ok = async () => void called++;
+    await expect(checkApiKey('not-a-key', ok)).rejects.toThrow(/does not look like/);
+    expect(called).toBe(0);
+    await expect(checkApiKey(` ${WORK} `, ok)).resolves.toBeUndefined();
+    expect(called).toBe(1);
+    const reject = async () => Promise.reject(Object.assign(new Error('401 invalid x-api-key'), { status: 401 }));
+    await expect(checkApiKey(WORK, reject)).rejects.toThrow(/did not accept that key/);
+    const offline = async () => Promise.reject(new Error('getaddrinfo ENOTFOUND api.anthropic.com'));
+    await expect(checkApiKey(WORK, offline)).rejects.toThrow(/Could not reach Anthropic.*ENOTFOUND/);
   });
 });
 

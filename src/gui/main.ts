@@ -1,19 +1,21 @@
 // Electron main process for `frostcode gui`. It hosts the same AppController the terminal
 // UI uses; the renderer is a sandboxed page that talks to it only through the preload's IPC API.
-import { app, BrowserWindow, dialog, ipcMain, Menu, screen, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, screen, session, shell, type IpcMainInvokeEvent } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { hasApiKey, MissingApiKeyError, prepareProcessEnv, redact, stashApiKey } from '../config/env.js';
-import { applySavedAccount } from '../config/accounts.js';
+import { hasApiKey, prepareProcessEnv, redact, stashApiKey } from '../config/env.js';
+import { addAccount, applySavedAccount, checkApiKey, useAccount } from '../config/accounts.js';
 import type { PromptAnswer } from '../core/permissions.js';
+import { WorkService } from '../work/service.js';
 import { GuiBackend, loadGuiPrefs, saveGuiPrefs, type BackendEvent } from './backend.js';
-import type { GuiCommand, GuiMode } from './protocol.js';
+import type { GuiCommand, GuiMode, WorkSnapshot } from './protocol.js';
 
 // Before anything else (and before Chromium launches helper processes): take the key out of
 // the environment that child processes inherit. The agent runtime still receives it explicitly.
 const accountWarning = applySavedAccount();
 if (accountWarning) console.warn(accountWarning);
-const keyPresent = hasApiKey();
+/** False until a key is found or saved: the window then shows the key setup screen instead of quitting. */
+let keyPresent = hasApiKey();
 stashApiKey();
 prepareProcessEnv();
 
@@ -23,12 +25,16 @@ const isMac = process.platform === 'darwin';
 const indexUrl = pathToFileURL(join(rendererDir, 'index.html')).href;
 
 app.setName('FrostCode');
+// The Start menu shortcut carries the same id (scripts/install-app.mjs), so the taskbar shows this
+// window as FrostCode rather than Electron, and pinning it pins the shortcut.
+if (process.platform === 'win32') app.setAppUserModelId('com.frostcode.desktop');
 app.enableSandbox();
 
 let win: BrowserWindow | null = null;
 let backend: GuiBackend | null = null;
+let work: WorkService | null = null;
 
-function send(event: BackendEvent | { type: 'command'; payload: GuiCommand }): void {
+function send(event: BackendEvent | { type: 'command'; payload: GuiCommand } | { type: 'work'; payload: WorkSnapshot }): void {
   if (win && !win.isDestroyed()) win.webContents.send(`frost:${event.type}`, event.payload);
 }
 
@@ -72,12 +78,42 @@ function handle(channel: string, fn: (...args: unknown[]) => unknown): void {
   });
 }
 
+let started = false;
+
+/** Start the conversation runtime once there is a key: at launch, or when one is saved in the app. */
+async function startBackend(): Promise<void> {
+  if (started || !backend) return;
+  started = true;
+  try {
+    await backend.start();
+  } catch (e) {
+    dialog.showErrorBox('FrostCode', redact((e as Error).message));
+  }
+}
+
 function need(): GuiBackend {
-  if (!backend) throw new Error('FrostCode is still starting');
+  if (!backend || !started) throw new Error(keyPresent ? 'FrostCode is still starting' : 'Enter your Anthropic API key first.');
   return backend;
 }
 
+function needWork(): WorkService {
+  if (!work) throw new Error('FrostCode is still starting');
+  return work;
+}
+
+/** The account name a key entered in the app is saved under (the same store as `frostcode account add`). */
+const DESKTOP_ACCOUNT = 'default';
+
 function registerIpc(): void {
+  handle('needsKey', () => !keyPresent);
+  handle('saveApiKey', async (key) => {
+    if (!isString(key, 500)) bad();
+    await checkApiKey(key as string);
+    addAccount(DESKTOP_ACCOUNT, key as string);
+    useAccount(DESKTOP_ACCOUNT);
+    keyPresent = true;
+    void startBackend();
+  });
   handle('init', () => need().initial());
   handle('refreshSessions', () => need().refreshSessions());
   handle('newSession', (cwd) => need().newSession(cwd === undefined ? undefined : isString(cwd, 4096) ? cwd : bad()));
@@ -116,6 +152,13 @@ function registerIpc(): void {
       : bad(),
   );
   handle('mcpTrust', (server, tool, trusted) => (isString(server, 200) && isString(tool, 200) && typeof trusted === 'boolean' ? need().mcpTrust(server, tool, trusted) : bad()));
+  handle('workLoad', (refresh) => needWork().load(refresh === true));
+  handle('workConnectJira', (site, email, token) =>
+    isString(site, 500) && isString(email, 320) && isString(token, 4096) ? needWork().connectJira(site, email, token) : bad(),
+  );
+  handle('workConnectMicrosoft', () => needWork().connectMicrosoft());
+  handle('workCancelMicrosoft', () => needWork().cancelMicrosoft());
+  handle('workDisconnect', (source) => (source === 'jira' || source === 'microsoft' ? needWork().disconnect(source) : bad()));
   handle('openExternal', async (url) => {
     if (!isString(url, 4096)) bad();
     const u = new URL(url as string);
@@ -159,7 +202,12 @@ function createWindow(): BrowserWindow {
     // right end (45px: the top bar less its bottom border, which stays visible under the buttons).
     ...(isMac
       ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 14, y: 14 } }
-      : { titleBarStyle: 'hidden' as const, titleBarOverlay: { color: '#0d0f13', symbolColor: '#b4bac4', height: 45 } }),
+      : {
+          titleBarStyle: 'hidden' as const,
+          titleBarOverlay: { color: '#0d0f13', symbolColor: '#b4bac4', height: 45 },
+          // Taskbar / Alt+Tab icon (macOS takes the app bundle's). dist/gui -> the repo's assets/.
+          icon: join(here, '..', '..', 'assets', process.platform === 'win32' ? 'FrostCode.ico' : 'FrostCode-1024.png'),
+        }),
     show: false,
     webPreferences: {
       preload: join(here, 'preload.cjs'),
@@ -262,12 +310,16 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
-    if (!keyPresent) {
-      dialog.showErrorBox('FrostCode', new MissingApiKeyError().message);
-      app.quit();
-      return;
-    }
     hardenSessions();
+    // Saved Jira / Microsoft sign-ins are encrypted with the OS (DPAPI on Windows, the Keychain on macOS).
+    work = new WorkService({
+      secrets: {
+        available: () => safeStorage.isEncryptionAvailable(),
+        encrypt: (text) => safeStorage.encryptString(text),
+        decrypt: (data) => safeStorage.decryptString(data),
+      },
+      emit: (snapshot) => send({ type: 'work', payload: snapshot }),
+    });
     registerIpc();
     buildMenu();
     backend = new GuiBackend({
@@ -277,18 +329,14 @@ if (!app.requestSingleInstanceLock()) {
     });
     win = createWindow();
     win.on('closed', () => (win = null));
-    try {
-      await backend.start();
-    } catch (e) {
-      dialog.showErrorBox('FrostCode', redact((e as Error).message));
-    }
+    if (keyPresent) await startBackend();
   });
 
   app.on('window-all-closed', () => app.quit());
 
   let quitting = false;
   app.on('before-quit', (e) => {
-    if (quitting || !backend) return;
+    if (quitting || !backend || !started) return;
     e.preventDefault();
     const n = backend.runningCount;
     if (n > 0) {
@@ -310,6 +358,7 @@ if (!app.requestSingleInstanceLock()) {
       }
     }
     quitting = true;
+    work?.shutdown();
     const b = backend;
     void b.shutdown().finally(() => app.quit());
   });

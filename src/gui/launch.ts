@@ -3,8 +3,7 @@ import { mkdirSync, openSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { frostHome, hasApiKey, MissingApiKeyError } from '../config/env.js';
-import { applySavedAccount } from '../config/accounts.js';
+import { frostHome } from '../config/env.js';
 import { resolveProjectPath, shortenPath } from '../core/projects.js';
 
 export const GUI_HELP = `frostcode gui [dir] [--wait]
@@ -18,11 +17,7 @@ export async function launchGui(argv: string[]): Promise<number> {
     console.log(GUI_HELP);
     return 0;
   }
-  applySavedAccount();
-  if (!hasApiKey()) {
-    console.error(new MissingApiKeyError().message);
-    return 1;
-  }
+  // No key is fine: the app opens on a screen that asks for one.
   const wait = argv.includes('--wait');
   const dirArg = argv.find((a) => !a.startsWith('-'));
   let cwd = '';

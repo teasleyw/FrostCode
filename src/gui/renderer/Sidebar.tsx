@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { GuiProjectGroup, GuiSession } from '../protocol.js';
-import { IconAsk, IconCheck, IconChevron, IconPencil, IconPlus, IconSearch, IconTrash } from './icons.js';
+import { IconAsk, IconBriefcase, IconChat, IconCheck, IconChevron, IconPencil, IconPlus, IconSearch, IconTrash } from './icons.js';
 import { filterGroups, IS_MAC, modKey, relativeTime } from './store.js';
 
 const PER_GROUP = 8;
@@ -27,6 +27,9 @@ interface Props {
   onNew(cwd?: string): void;
   onRename(s: GuiSession, title: string): void;
   onDelete(s: GuiSession): void;
+  /** Which tab the main area shows: the conversation, or the Work tab. */
+  view: 'chat' | 'work';
+  onView(view: 'chat' | 'work'): void;
 }
 
 function loadCollapsed(): Set<string> {
@@ -81,6 +84,14 @@ export function Sidebar(p: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-top drag">
+        <div className="view-tabs no-drag" role="tablist" aria-label="View">
+          <button role="tab" aria-selected={p.view === 'chat'} className={p.view === 'chat' ? 'on' : ''} onClick={() => p.onView('chat')} title={`Conversations (${modKey('1')})`}>
+            <IconChat /> Chats
+          </button>
+          <button role="tab" aria-selected={p.view === 'work'} className={p.view === 'work' ? 'on' : ''} onClick={() => p.onView('work')} title={`Work: Jira, GitHub, email and Teams (${modKey('2')})`}>
+            <IconBriefcase /> Work
+          </button>
+        </div>
         <button className="btn-new no-drag" onClick={() => p.onNew()} title={`New conversation (${modKey('N')})`}>
           <IconPlus /> New conversation <kbd>{modKey('N')}</kbd>
         </button>

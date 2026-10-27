@@ -2,8 +2,10 @@
 // the sandboxed preload cannot load local modules, and the renderer bundle only needs types.
 import type { PromptAnswer, PromptRequest } from '../core/permissions.js';
 import type { McpAction, McpEntryView } from '../mcp/types.js';
+import type { WorkSnapshot } from '../work/types.js';
 
-export type { McpAction, McpEntryView, PromptAnswer, PromptRequest };
+export type { McpAction, McpEntryView, PromptAnswer, PromptRequest, WorkSnapshot };
+export type * from '../work/types.js';
 
 /** Same shape as ui/tools.ts DiffLine (not imported: that module pulls in node:fs types). */
 export type DiffLine = { type: 'add' | 'remove' | 'context' | 'gap'; text: string; oldNo?: number; newNo?: number };
@@ -112,10 +114,16 @@ export interface GuiEvents {
   transcript: TranscriptPatch;
   sessions: GuiProjectGroup[];
   command: GuiCommand;
+  /** The Work tab: each source updates it as it lands. */
+  work: WorkSnapshot;
 }
 
 /** What the preload exposes as window.frost. Every call is an IPC round trip to the main process. */
 export interface FrostApi {
+  /** True when no API key was found at launch: the renderer shows the key setup screen first. */
+  needsKey(): Promise<boolean>;
+  /** Checks the key with Anthropic, saves it as the "default" account and starts the app. */
+  saveApiKey(key: string): Promise<void>;
   init(): Promise<GuiInitial>;
   refreshSessions(): Promise<GuiProjectGroup[]>;
   newSession(cwd?: string): Promise<void>;
@@ -138,5 +146,13 @@ export interface FrostApi {
   mcpAction(id: string, action: McpAction): Promise<string>;
   /** Trusted tools run without the per-call approval prompt. */
   mcpTrust(server: string, tool: string, trusted: boolean): Promise<void>;
+  /** The Work tab's sources and daily list (refresh = fetch everything and rewrite the list). */
+  workLoad(refresh?: boolean): Promise<WorkSnapshot>;
+  /** Checks the email + API token against the site; the token is stored encrypted in the main process. */
+  workConnectJira(site: string, email: string, token: string): Promise<string>;
+  /** Starts the Microsoft device-code sign-in; the code to enter also arrives as work.microsoftPending. */
+  workConnectMicrosoft(): Promise<{ userCode: string; verificationUri: string }>;
+  workCancelMicrosoft(): Promise<void>;
+  workDisconnect(source: 'jira' | 'microsoft'): Promise<void>;
   on<K extends keyof GuiEvents>(event: K, fn: (payload: GuiEvents[K]) => void): () => void;
 }

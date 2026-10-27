@@ -157,6 +157,28 @@ export function useAccount(name: string): void {
   writeFile(f);
 }
 
+/**
+ * Ask Anthropic whether a key works before it is saved: listing models needs a valid key and costs
+ * nothing. `list` is a test seam.
+ */
+export async function checkApiKey(key: string, list?: (key: string) => Promise<unknown>): Promise<void> {
+  key = key.trim();
+  if (!KEY_SHAPE.test(key)) throw new Error('That does not look like an Anthropic API key (sk-ant-...).');
+  const run =
+    list ??
+    (async (k: string) => {
+      const { default: Anthropic } = await import('@anthropic-ai/sdk');
+      return new Anthropic({ apiKey: k, maxRetries: 0, timeout: 20_000 }).models.list({ limit: 1 });
+    });
+  try {
+    await run(key);
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status === 401 || status === 403) throw new Error('Anthropic did not accept that key. Check that it was copied whole and has not been revoked.');
+    throw new Error(`Could not reach Anthropic to check the key: ${(e as Error).message}`);
+  }
+}
+
 /** At startup: load the remembered account's key. A broken saved account falls back to the env key. */
 export function applySavedAccount(): string | null {
   const name = activeAccount();

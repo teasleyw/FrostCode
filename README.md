@@ -51,8 +51,12 @@ frostcode                                # or: frostcode gui
   command's first word and never approves a chained command.
 - Saved account keys (`frostcode account add`) go to `%USERPROFILE%\.frostcode\account-keys.json`,
   protected by your user profile's permissions (there is no Keychain).
-- The desktop app opens with `frostcode gui`. `npm run install-app` (an Applications bundle) and
-  `npm run e2e` (bash + expect) are macOS / Linux only.
+- The desktop app opens with `frostcode gui`, or install it as a Windows app with
+  `npm run install-app`: a FrostCode shortcut in the Start menu and on the desktop, with the snowflake
+  icon on the taskbar (pin it from there). Rebuilding updates it; delete the two shortcuts to remove it.
+  Opened without a key, the app asks for one: it is checked with Anthropic and saved as the `default`
+  account (the same store as `frostcode account add`), so nothing has to be set in the environment.
+- `npm run e2e` (bash + expect) is macOS / Linux only.
 
 ## Usage
 

@@ -8,9 +8,11 @@ const invoke =
   (...args: unknown[]) =>
     ipcRenderer.invoke(`frost:${channel}`, ...args);
 
-const EVENTS: (keyof GuiEvents)[] = ['state', 'transcript', 'sessions', 'command'];
+const EVENTS: (keyof GuiEvents)[] = ['state', 'transcript', 'sessions', 'command', 'work'];
 
 const api: FrostApi = {
+  needsKey: invoke('needsKey') as FrostApi['needsKey'],
+  saveApiKey: invoke('saveApiKey') as FrostApi['saveApiKey'],
   init: invoke('init') as FrostApi['init'],
   refreshSessions: invoke('refreshSessions') as FrostApi['refreshSessions'],
   newSession: invoke('newSession') as FrostApi['newSession'],
@@ -30,6 +32,11 @@ const api: FrostApi = {
   mcpList: invoke('mcpList') as FrostApi['mcpList'],
   mcpAction: invoke('mcpAction') as FrostApi['mcpAction'],
   mcpTrust: invoke('mcpTrust') as FrostApi['mcpTrust'],
+  workLoad: invoke('workLoad') as FrostApi['workLoad'],
+  workConnectJira: invoke('workConnectJira') as FrostApi['workConnectJira'],
+  workConnectMicrosoft: invoke('workConnectMicrosoft') as FrostApi['workConnectMicrosoft'],
+  workCancelMicrosoft: invoke('workCancelMicrosoft') as FrostApi['workCancelMicrosoft'],
+  workDisconnect: invoke('workDisconnect') as FrostApi['workDisconnect'],
   on(event, fn) {
     if (!EVENTS.includes(event)) throw new Error(`Unknown event ${String(event)}`);
     // Never hand the raw IpcRendererEvent (it carries `sender`) to the page.

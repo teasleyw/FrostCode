@@ -22,3 +22,7 @@ export const IconSend = P('M8 13V3M3.5 7.5L8 3l4.5 4.5');
 export const IconWarn = P('M8 2.5l6 10.5H2zM8 7v2.5M8 11.5v.01');
 export const IconInfo = P('M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12zM8 7.5V11M8 5v.01');
 export const IconAsk = P('M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12zM6.3 6.3a1.8 1.8 0 1 1 2.6 1.6c-.6.3-.9.7-.9 1.3M8 11.2v.01');
+export const IconChat = P('M2.5 4A1.5 1.5 0 0 1 4 2.5h8A1.5 1.5 0 0 1 13.5 4v5.5A1.5 1.5 0 0 1 12 11H6.5L3.5 13.5V11A1.5 1.5 0 0 1 2.5 9.5z');
+export const IconBriefcase = P('M2.5 6A1.5 1.5 0 0 1 4 4.5h8A1.5 1.5 0 0 1 13.5 6v5.5A1.5 1.5 0 0 1 12 13H4a1.5 1.5 0 0 1-1.5-1.5zM6 4.5V3.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M2.5 8.5h11');
+export const IconRefresh = P('M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3');
+export const IconExternal = P('M9 3h4v4M13 3L7.5 8.5M11.5 9.5v3a.5.5 0 0 1-.5.5H3.5a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5h3');
